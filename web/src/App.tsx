@@ -1,0 +1,56 @@
+import { AgentOverview } from './views/AgentOverview';
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { apiGet } from "@/lib/api";
+import type { OnboardState, Status } from "@/lib/types";
+import { Toaster } from "@/components/ui/sonner";
+import { ProfilesView } from "@/views/ProfilesView";
+import { ProfileDetail } from "@/views/ProfileDetail";
+
+export function App() {
+  const [onboard, setOnboard] = useState<OnboardState | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const os = await apiGet<OnboardState>("/api/onboard/state");
+      setOnboard(os);
+      if (os.hasConfig) {
+        setStatus(await apiGet<Status>("/api/status").catch(() => null));
+      }
+      setError(null);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  if (error) return <Shell><p className="text-destructive text-sm">加载失败：{error}</p></Shell>;
+  if (!onboard) return <Shell><p className="text-muted-foreground text-sm">加载中…</p></Shell>;
+
+
+  return (
+    <Shell>
+      {selected ? (
+        <ProfileDetail profile={selected} onBack={() => { setSelected(null); void refresh(); }} />
+      ) : (
+        <>
+          <AgentOverview />
+          <ProfilesView onOpen={setSelected} />
+          {status && (
+            <p className="mt-6 text-xs text-muted-foreground">
+              feishu-collaborator · v{status.version} · {status.online} 个在线 · 按机器人管理连接与工作空间
+            </p>
+          )}
+        </>
+      )}
+      <Toaster />
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: ReactNode }) {
+  return <div className="mx-auto max-w-4xl p-6">{children}</div>;
+}
