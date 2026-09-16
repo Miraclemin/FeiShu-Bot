@@ -39,3 +39,8 @@ desktop-release/
 # Local installer builds and image-generation metadata
 desktop-release*/
 resources/mascots/*-generation.json
+
+# Local dependency symlink and app backups
+node_modules
+desktop-backups/
+reports/
