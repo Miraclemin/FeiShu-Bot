@@ -2,20 +2,26 @@
 
 基于 [Miraclemin/lark-team-agent-bridge](https://github.com/Miraclemin/lark-team-agent-bridge) 当前工作树独立创建。
 
-桌面工作台预览版：Mac / Windows 共用 Electron + React，支持四种本机 Agent 检测和切换。使用方法及尚未实现的权限边界见 [WORKBENCH.md](docs/WORKBENCH.md)。
+桌面工作台：Mac / Windows 共用 Electron + React，支持四种本机 Agent 检测和切换。使用方法及尚未实现的权限边界见 [WORKBENCH.md](docs/WORKBENCH.md)。
 
 基于 [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge) 的源码维护版本。把飞书消息连接到本机 Codex/Claude，并为产品、研发、巡检角色提供独立项目配置。
 
 **这不是给已安装文件打补丁的版本。** 新功能已经进入 `src/`，通过 TypeScript 构建生成 `dist/cli.js`。安装包携带所需 Python 配置工具，运行时不加载旧 `bridge_extension/commands.mjs`，也不执行补丁脚本。
 
 - 上游基线：`589868119ce9a0a860aaf4936b5f9bac14e72681`，0.7.1。
-- 本分支版本：`0.7.1-team.1`。
+- 本分支版本：`0.8.0-preview.1`。
 - 保留上游 MIT 许可证与来源说明；[原版使用说明](docs/UPSTREAM-README.zh.md)。
 - 项目和 App 名称为 `feishu-collaborator`；保留 `lark-channel-bridge` CLI 别名以兼容现有调用。当前尚未发布 npm 包。
 
+## 下载与分享
+
+从 [GitHub Releases](https://github.com/Miraclemin/feishu-collaborator/releases) 下载预览版。Mac 选择 arm64（Apple Silicon）或 x64（Intel），Windows 选择 x64 的 exe。安装包没有 Apple 公证或 Windows 商业签名；Windows 安装运行尚未真机验收。
+
+发给朋友的入口：[安装与首次使用](docs/GETTING-STARTED.zh.md)。每个人安装自己的客户端、登录自己的 Agent、创建自己的飞书机器人。当前仅机器人创建者可以发起本机任务。
+
 ## 当前验证边界
 
-严格技能隔离仅接入 Codex Docker 预览：文件边界测试通过，真实模型调用因容器连接 ChatGPT 失败而未通过。Windows、其他引擎的严格隔离未完成；不应视为生产就绪。安装包尚未随本仓库发布。
+当前使用本机 Agent CLI；历史 Docker 严格隔离原型已停用。技能选择不是文件访问沙箱，不应视为生产就绪。安装包以预览版发布，系统支持与限制见下文。
 
 ## 本次新增和迁移了什么
 
@@ -54,7 +60,7 @@
 
 新增项目绑定工具目前使用 Unix 文件锁，支持 macOS/Linux；Windows 保留上游核心测试，但本扩展的绑定落盘尚未适配。
 
-需要 Node.js 20.12+、pnpm 10、Python 3.9+，以及已登录的本机 Agent CLI。workspace 自动命令审批需要支持 `--approve-for-me` 的 Codex 版本。
+需要 Node.js 22.12+、pnpm 10、Python 3.9+，以及已登录的本机 Agent CLI。workspace 自动命令审批需要支持 `--approve-for-me` 的 Codex 版本。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -63,7 +69,7 @@ pnpm test
 python3 -m unittest discover -s resources -p 'test_*.py'
 pnpm build
 pnpm pack --pack-destination /tmp
-npm install -g /tmp/lark-channel-bridge-0.7.1-team.1.tgz
+npm install -g /tmp/feishu-collaborator-0.8.0-preview.1.tgz
 lark-channel-bridge restart --profile product-manager
 lark-channel-bridge restart --profile inspector
 lark-channel-bridge restart --profile codex

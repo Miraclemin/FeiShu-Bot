@@ -1,3 +1,4 @@
+import { appMascot } from './components/AgentAvatar';
 import { AgentOverview } from './views/AgentOverview';
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiGet } from "@/lib/api";
@@ -26,6 +27,12 @@ export function App() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const icon = document.createElement('link');
+    icon.rel = 'icon'; icon.type = 'image/png'; icon.href = appMascot;
+    document.head.appendChild(icon);
+    return () => icon.remove();
+  }, []);
 
   if (error) return <Shell><p className="text-destructive text-sm">加载失败：{error}</p></Shell>;
   if (!onboard) return <Shell><p className="text-muted-foreground text-sm">加载中…</p></Shell>;

@@ -1,11 +1,14 @@
+import { AgentAvatar, mascotOptions } from '@/components/AgentAvatar';
+import { defaultAvatarId } from '../../../src/config/avatar';
 import { WorkbenchView } from './WorkbenchView';
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import type { BotInfo, ProfileInfo } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 import {
   Dialog,
   DialogContent,
@@ -17,17 +20,12 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { ConfigView } from "./ConfigView";
 
-function uptime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h${m % 60}m`;
-  return `${Math.floor(h / 24)}d${h % 24}h`;
-}
-
 export function ProfileDetail({ profile, onBack }: { profile: string; onBack: () => void }) {
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [renaming, setRenaming] = useState(false);
   const [info, setInfo] = useState<ProfileInfo | null>(null);
   const [bots, setBots] = useState<BotInfo[]>([]);
   const [confirm, setConfirm] = useState(false);
@@ -78,6 +76,24 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
     }
   }
 
+  async function saveName() {
+    setRenaming(true);
+    try {
+      await apiPost('/api/profiles/rename', { profile, displayName: draftName });
+      await loadRuntime(); setEditing(false); toast.success('名称已保存');
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setRenaming(false); }
+  }
+  async function saveAvatar(avatarId: string) {
+    setAvatarSaving(true);
+    try {
+      await apiPost('/api/profiles/avatar', { profile, avatarId });
+      setInfo(current => current ? { ...current, avatarId } : current);
+      setAvatarOpen(false); toast.success('头像已更新');
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setAvatarSaving(false); }
+  }
+  const displayName = info?.displayName || profile;
   const running = info?.running ?? bots.length > 0;
 
   return (
@@ -86,9 +102,17 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回">
           <ArrowLeft />
         </Button>
-        <h1 className="text-2xl font-semibold">{profile}</h1>
+        <button aria-label="更换 Agent 头像" title="更换头像" className="shrink-0 rounded-2xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setAvatarOpen(true)}><AgentAvatar profile={profile} avatarId={info?.avatarId} className="size-14" /></button>
+        <div className="flex min-w-0 items-center gap-2">
+          {editing ? <form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); void saveName(); }}>
+            <Input aria-label="Agent 名称" autoFocus maxLength={80} value={draftName} disabled={renaming} onChange={e => setDraftName(e.target.value)} />
+            <Button size="sm" disabled={renaming || !draftName.trim()}>{renaming ? '保存中…' : '保存'}</Button>
+            <Button type="button" size="sm" variant="ghost" disabled={renaming} onClick={() => setEditing(false)}>取消</Button>
+          </form> : <><h1 className="text-2xl font-semibold break-all">{displayName}</h1><Button variant="ghost" size="icon" aria-label="编辑 Agent 名称" onClick={() => { setDraftName(displayName); setEditing(true); }}><Pencil /></Button></>}
+        </div>
         {info && <Badge variant="secondary">{info.agentKind}</Badge>}
         {running ? <Badge variant="success">在线</Badge> : <Badge variant="outline">未运行</Badge>}
+        {running && <Button className="ml-auto" variant="destructive" size="sm" onClick={() => setConfirm(true)}>停止</Button>}
         {!running && (
           <Button className="ml-auto" size="sm" disabled={starting} onClick={start}>
             {starting ? "启动中…" : "启动"}
@@ -96,43 +120,33 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
         )}
       </div>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>运行状态</CardTitle>
-          {running && (
-            <Button variant="destructive" size="sm" onClick={() => setConfirm(true)}>停止</Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          {bots.length === 0 ? (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">未运行。点右上角「启动」在主进程内上线。</p>
-              <Button size="sm" disabled={starting} onClick={start}>{starting ? "启动中…" : "启动"}</Button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {bots.map((b) => (
-                <div key={b.id} className="rounded-md border px-3 py-2 text-sm">
-                  <span className="font-medium">{b.botName ?? "（连接中）"}</span>
-                  <span className="text-muted-foreground"> · pid {b.pid} · 运行 {uptime(b.uptimeMs)} · v{b.version}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {startError && <p role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">启动失败：{startError}</p>}
       <WorkbenchView profile={profile} onApplied={() => void loadRuntime()} />
       <details className="rounded-lg border p-4"><summary className="cursor-pointer">飞书连接与高级设置</summary><div className="mt-4"><ConfigView profile={profile} /></div></details>
 
+      <Dialog open={avatarOpen} onOpenChange={open => { if (!avatarSaving) setAvatarOpen(open); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>给 Agent 换个头像</DialogTitle>
+            <DialogDescription>选一个你喜欢的小搭档，仅更改本软件中的头像。</DialogDescription></DialogHeader>
+          <div className="grid grid-cols-3 gap-3">
+            {mascotOptions.map(item => <button key={item.id} disabled={avatarSaving}
+              aria-label={item.label} aria-pressed={(info?.avatarId ?? defaultAvatarId(profile)) === item.id}
+              className="rounded-2xl border-2 border-transparent p-2 text-center transition-colors hover:bg-accent aria-pressed:border-primary disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary"
+              onClick={() => void saveAvatar(item.id)}>
+              <AgentAvatar profile={profile} avatarId={item.id} className="aspect-square w-full" />
+              <span className="mt-2 block text-xs">{item.label}</span>
+            </button>)}
+          </div>
+          {avatarSaving && <p role="status" className="text-sm text-muted-foreground">正在保存…</p>}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={confirm} onOpenChange={(o) => !o && setConfirm(false)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>停止 {profile}？</DialogTitle>
+            <DialogTitle>停止 {displayName}？</DialogTitle>
             <DialogDescription>
-              将停止该 profile 正在运行的 bot。若它是后台服务，会一并禁用自动重启（不会被 KeepAlive 拉起）；
-              下次可用 <code>lark-channel-bridge start</code> 重新启动。
+              停止后将不再处理新消息。之后可点击右上角“启动”恢复。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

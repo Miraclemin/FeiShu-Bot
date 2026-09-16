@@ -1,3 +1,5 @@
+import { PermissionGuide } from './PermissionGuide';
+import { BaseTablePicker } from './BaseTablePicker';
 import { SkillPicker } from './SkillPicker';
 import { GroupPicker } from './ConfigView';
 import { useEffect, useState } from 'react';
@@ -8,11 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 interface Inventory { kind: AgentKind; label: string; installed: boolean; binaryPath: string | null; }
-interface Group { skillIsolation?: 'strict' | 'catalog'; enabled: boolean; name: string; workspace: string; persona: string; documents: string[]; skills?: string[]; }
-interface Settings { agentKind: AgentKind; accessMode: string; protected: boolean; workbench: { revision: number; protectDocuments: true; groups: Record<string, Group> }; }
+interface Group { resources?: string[]; role?: string; project?: { name: string; url: string; requirements: string; bugs: string }; skillIsolation?: 'strict' | 'catalog'; enabled: boolean; name: string; workspace: string; persona: string; documents: string[]; skills?: string[]; }
+interface Settings { appId?: string; tenant?: string; agentKind: AgentKind; accessMode: string; protected: boolean; workbench: { revision: number; protectDocuments: true; groups: Record<string, Group> }; }
 const area = 'w-full rounded-md border bg-background p-3 text-sm min-h-24';
 export function WorkbenchView({ profile, onApplied }: { profile: string; onApplied: () => void }) {
   const [agents, setAgents] = useState<Inventory[]>([]);
@@ -22,11 +23,16 @@ export function WorkbenchView({ profile, onApplied }: { profile: string; onAppli
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState('');
   const [known, setKnown] = useState<{ id: string; name: string }[]>([]);
+  const [catalog, setCatalog] = useState<{id:string;name:string}[]>([]);
+  const [connection, setConnection] = useState<{checks:{label:string;ok:boolean;message:string}[];note:string}|null>(null);
+  const [checking,setChecking]=useState(false);
+  const [check, setCheck] = useState(false);
   const [message, setMessage] = useState('');
   const endpoint = `/api/workbench?profile=${encodeURIComponent(profile)}`;
   const detect = () => apiGet<{ agents: Inventory[] }>('/api/agents').then(x => setAgents(x.agents)).catch(e => setError(e.message));
   useEffect(() => {
     void detect();
+    apiGet<{skills:{id:string;name:string}[]}>('/api/skills').then(x => setCatalog(x.skills)).catch(() => {});
     apiGet<Settings>(endpoint).then(setSettings).catch(e => setError(e.message));
     apiGet<{ chats: { id: string; name: string }[] }>(`/api/chats?profile=${encodeURIComponent(profile)}`).then(x => setKnown(x.chats)).catch(() => {});
   }, [profile]);
@@ -37,7 +43,7 @@ export function WorkbenchView({ profile, onApplied }: { profile: string; onAppli
   function addGroup(id: string, name = '') {
     if (!/^oc_[a-zA-Z0-9]+$/.test(id)) { toast.error('请选择群或填写 oc_ 开头的群 ID'); return; }
     setSettings(s => s && ({ ...s, workbench: { ...s.workbench, groups: { ...s.workbench.groups,
-      [id]: s.workbench.groups[id] ?? { enabled: false, name, workspace: '', persona: '', documents: [], skills: [] } } } }));
+      [id]: s.workbench.groups[id] ?? { enabled: false, name, workspace: '', persona: '', documents: [], skills: catalog.filter(x => ['lark-base','lark-im','lark-shared'].includes(x.name)).map(x => x.id) } } } }));
     setSelected(id);
   }
   async function save() {
@@ -48,7 +54,11 @@ export function WorkbenchView({ profile, onApplied }: { profile: string; onAppli
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
+  const project = group?.project ?? { name: '', url: '', requirements: '', bugs: '' };
+  const missing = !group ? ['选择一个飞书群'] : [!group.role && '选择工作角色', !project.name && '填写项目名称', !group.workspace && '选择工作目录', false].filter(Boolean);
   return <div className="space-y-5">
+    <PermissionGuide key={profile} profile={profile} />
+
     <Card><CardHeader className="flex-row justify-between"><CardTitle>运行这个机器人的 Agent</CardTitle><Button size="sm" variant="outline" onClick={detect}>重新检测</Button></CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">飞书里的机器人保持不变。选择本机引擎，保存后自动切换；切换时开始新对话。</p>
@@ -68,23 +78,26 @@ export function WorkbenchView({ profile, onApplied }: { profile: string; onAppli
       <Button variant="outline" onClick={() => setPickerOpen(true)}>搜索并选择群</Button><GroupPicker profile={profile} open={pickerOpen} onOpenChange={setPickerOpen} added={Object.keys(settings.workbench.groups)} onPick={addGroup} />
       <div className="flex flex-wrap gap-2">{Object.entries(settings.workbench.groups).map(([id, g]) => <Button key={id} variant={id === selected ? 'default' : 'outline'} size="sm" onClick={() => setSelected(id)}>{g.name || id.slice(0, 16)} · {g.enabled ? '启用' : '暂停'}</Button>)}</div>
       {group ? <div className="space-y-4 rounded-xl border p-4">
+        <h3 className="font-medium">1. 它在这个群负责什么？</h3>
+        <select aria-label="工作角色" className="w-full border rounded-md p-2 bg-background" value={group.role ?? ''} onChange={e => { const role=e.target.value; const skillName={ 'product-manager':'collaborator-product-manager', developer:'collaborator-developer', inspector:'collaborator-inspector' }[role]; const basic=catalog.filter(x => ['lark-base','lark-im','lark-shared',skillName].includes(x.name)).map(x=>x.id); patchGroup({role,skills:[...new Set([...(group.skills ?? []),...basic])]}); }}><option value="">请选择角色</option><option value="product-manager">产品经理 · 整理需求</option><option value="developer">研发 · 修复与实现</option><option value="inspector">巡检 · 检查问题</option></select>
+        <h3 className="font-medium">2. 它服务哪个项目？</h3>
+        {([['name','项目名称','例如：我的产品'],['url','产品网址（选填）','https://']] as const).map(([key,label,placeholder]) => <div key={key}><Label htmlFor={'project-'+key}>{label}</Label><Input id={'project-'+key} placeholder={placeholder} value={project[key]} onChange={e=>patchGroup({project:{...project,[key]:e.target.value}})} /></div>)}
+        <BaseTablePicker key={profile+selected} profile={profile} appId={settings.appId} tenant={settings.tenant} onAdd={urls=>{patchGroup({resources:[...new Set([...(group.resources ?? [project.requirements,project.bugs].filter(Boolean)),...urls])]});setConnection(null);}} />
+        <div className="space-y-2"><Label htmlFor="group-resources">已添加的资料（也可直接粘贴单张表或文档）</Label><textarea id="group-resources" className={area} placeholder="粘贴飞书文档或多维表格链接，每行一份，可以添加多份" value={(group.resources ?? [project.requirements,project.bugs].filter(Boolean)).join('\n')} onChange={e=>{patchGroup({resources:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)});setConnection(null);}} /><p className="text-xs text-muted-foreground">添加链接不会自动授予访问权。点击下方检查；若无权限，请在飞书资料的分享设置中授权当前机器人，再重试。此清单是任务资料，不是已经实现的文档权限隔离。</p></div>
+        <Button disabled={checking} variant="outline" onClick={async()=>{setCheck(true);setChecking(true);setConnection(null);try{setConnection(await apiPost(`/api/workbench/check?profile=${encodeURIComponent(profile)}`,{workbench:settings.workbench,chatId:selected}));}catch(e){setError((e as Error).message);}finally{setChecking(false);}}}>{checking ? '正在逐份检查资料…' : '3. 检查资料访问权限'}</Button>
+        {connection && <div role="status" className="space-y-2 rounded-md border p-3">{connection.checks.map(c=><p key={c.label} className="text-sm">{c.ok?'✓':'!'} {c.label}：{c.message}</p>)}<p className="text-xs text-muted-foreground">{connection.note}</p></div>}
+        {check && <div role="status" className="rounded-md border p-3 text-sm">{missing.length ? <><p>还差这些：</p><ul>{missing.map(x=><li key={String(x)}>· {x}</li>)}</ul></> : <p>必要信息已填写，可以保存。</p>}<p className="mt-2 text-muted-foreground">这里只检查填写情况。表格访问结果以上方连接检查为准；保存本身不会读取表格。</p></div>}
+
         <div className="flex items-center justify-between"><span className="text-sm">在这个群启用</span><Switch checked={group.enabled} onCheckedChange={enabled => patchGroup({ enabled })} /></div>
         <div><Label htmlFor="group-name">群显示名称</Label><Input id="group-name" value={group.name} onChange={e => patchGroup({ name: e.target.value })} /></div>
         <div><Label htmlFor="workspace">工作目录</Label><div className="flex gap-2"><Input id="workspace" value={group.workspace} placeholder="选择本机项目目录" onChange={e => patchGroup({ workspace: e.target.value })} />
           {'workbenchDesktop' in window && <Button variant="outline" onClick={async () => { const path = await (window as unknown as { workbenchDesktop: { chooseDirectory(): Promise<string | null> } }).workbenchDesktop.chooseDirectory(); if (path) patchGroup({ workspace: path }); }}>选择目录</Button>}</div></div>
         <div><Label htmlFor="persona">本群人格与回复要求</Label><textarea id="persona" className={area} value={group.persona} placeholder="例如：你是产品经理，先给结论，再给一个具体例子。" onChange={e => patchGroup({ persona: e.target.value })} /></div>
-        <label className="flex gap-2 text-sm"><input type="checkbox" checked={group.skillIsolation === 'strict'} onChange={e => patchGroup({ skillIsolation: e.target.checked ? 'strict' : 'catalog' })} />严格技能隔离（Codex，需要 Docker）</label>
-        {group.skillIsolation === 'strict' && <p className="text-xs text-muted-foreground">仅挂载勾选技能与项目快照，不访问本机主目录。文件修改暂不回写；不提供飞书凭据，其他引擎会被阻止。</p>}
+        <p className="text-sm text-muted-foreground">本机工作目录模式：任务直接在上方目录执行，不使用 Docker。Skill 勾选控制加载清单，不是文件访问权限。</p>
+        {(group.skillIsolation === 'strict' || group.documents.length > 0) && <div className="rounded-md border p-3 text-sm"><p>此群保留着旧的实验隔离配置。切换后，资料链接会保留，但不再作为严格权限边界。</p><Button variant="outline" onClick={()=>patchGroup({skillIsolation:'catalog',resources:[...new Set([...(group.resources ?? []),...group.documents])],documents:[]})}>切换为本机工作目录模式</Button></div>}
+        <p className="text-xs text-muted-foreground">在飞书对话中输入 /help 或 /usage，可查看本群配置的 Skills。此清单是加载提示，不是严格隔离或权限白名单。</p>
         <SkillPicker cwd={group.workspace} selected={group.skills ?? []} onChange={skills => patchGroup({ skills })} />
-        <details className="space-y-2"><summary className="cursor-pointer text-sm">严格文档边界（设置后会阻止本机任务）</summary><p className="text-xs text-muted-foreground">原生 CLI 可通过自己的工具访问资料，当前不能证明逐文档白名单有效。填入链接后进入安全阻断状态，不会把资料交给模型；这不是已完成的文档授权功能。</p><textarea aria-label="严格文档边界" className={area} value={group.documents.join('\n')} placeholder="每行一条飞书文档链接" onChange={e => patchGroup({ documents: e.target.value.split('\n').filter(Boolean) })} /></details>
-        {group.documents.length > 0 && <Badge variant="outline">严格资料边界 · 执行已阻断</Badge>}
       </div> : <p className="text-sm text-muted-foreground">选择一个群开始配置。也可在下方飞书连接设置中授权查看群或拉机器人进群。</p>}
-    </CardContent></Card>
-    <Card><CardHeader><CardTitle>调用者与文档权限</CardTitle></CardHeader><CardContent className="space-y-3 text-sm">
-      <Badge variant={settings.protected ? 'success' : 'outline'}>{settings.protected ? '保护已开启' : '保存后开启保护'}</Badge>
-      <p>当前本机执行仅允许经过飞书验证的机器人创建者。普通群成员、外部人员和配置管理员都不能借用机器人的文档权限发起任务。</p>
-      <p className="text-muted-foreground">群名单只决定机器人在哪工作，不代表群内所有人都获得使用权。用户的文档权限尚未验证时，拒绝委托执行。创建者在群内发起任务，结果会发到该群。</p>
-      <p className="text-xs text-muted-foreground">技能按群独立加载。技能选择不授予额外工具权限，也不替代文件沙箱。飞书资源权限由飞书决定，本页不会自动扩大授权。</p>
     </CardContent></Card>
     {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
     {message && <p role="status" className="text-sm">{message}</p>}

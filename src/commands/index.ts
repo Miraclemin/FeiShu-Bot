@@ -1,3 +1,4 @@
+import { discoverSkills } from '../agent/workbench-skills';
 import { handleProject, readProject, projectCardText } from '../team/project-bindings';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -177,6 +178,7 @@ const handlers: Record<string, Handler> = {
   '/status': handleStatus,
   '/project': handleTeamProject,
   '/help': handleHelp,
+  '/usage': handleHelp,
   '/account': handleAccount,
   '/config': handleConfig,
   '/stop': handleStop,
@@ -1345,7 +1347,15 @@ function formatDoctorEchoStatus(echoText: string, state: RunState): string {
 }
 
 async function handleHelp(_args: string, ctx: CommandContext): Promise<void> {
-  const card = helpCard(ctx.agent.displayName);
+  const group = ctx.controls.profileConfig.workbench?.groups[ctx.msg.chatId];
+  let skills = '当前对话未配置群 Skills。';
+  if (group) {
+    try {
+      const catalog = new Map(discoverSkills(group.workspace || undefined).map(s => [s.id, s.name]));
+      skills = (group.skills ?? []).map(id => catalog.get(id) ?? '技能已移动或删除，请重新选择').join('、') || '本群未选择 Skills。';
+    } catch { skills = '技能目录暂时无法读取，请在工作台检查。'; }
+  }
+  const card = helpCard(ctx.agent.displayName, skills);
   await ctx.channel.send(ctx.msg.chatId, { card }, commandReplyOptions(ctx));
 }
 

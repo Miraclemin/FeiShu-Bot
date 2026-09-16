@@ -48,6 +48,8 @@ export function formatRootConfig(root: RootConfig): string {
 
 type StoredProfileConfig = Pick<
   ProfileConfig,
+  | 'avatarId'
+  | 'displayName'
   | 'workbench'
   | 'schemaVersion'
   | 'agentKind'
@@ -89,6 +91,8 @@ function serializeRootConfig(root: RootConfig): StoredRootConfig {
 function serializeProfileConfig(profile: ProfileConfig): StoredProfileConfig {
   return {
     schemaVersion: profile.schemaVersion,
+    ...(profile.avatarId ? { avatarId: profile.avatarId } : {}),
+    ...(profile.displayName ? { displayName: profile.displayName } : {}),
     agentKind: profile.agentKind,
     ...(profile.workbench ? { workbench: profile.workbench } : {}),
     mode: profile.mode,

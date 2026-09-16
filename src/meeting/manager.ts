@@ -41,6 +41,7 @@ export interface MeetingPushHealth {
 }
 
 export interface MeetingManagerDeps {
+  transcriptDir?: string;
   client: VcRequestClient;
   /** Live config accessor — re-read per use so `/config` edits apply. */
   config: () => MeetingConfig;
@@ -232,6 +233,7 @@ export class MeetingManager {
       meetingNo: joined.meetingNo,
       ...(joined.topic ? { topic: joined.topic } : {}),
       config,
+      ...(this.deps.transcriptDir ? { transcriptDir: this.deps.transcriptDir } : {}),
       ...(botOpenId ? { botOpenId } : {}),
       ...(opts.originChatId ? { originChatId: opts.originChatId } : {}),
     });

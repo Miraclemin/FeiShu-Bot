@@ -20,7 +20,6 @@ web/dist/
 
 # Local maintenance scripts and unreleased changelog are not part of the package
 scripts/
-CHANGELOG.md
 tests-smoke/
 
 # Local project bindings, credentials and runtime evidence never belong in Git
@@ -34,3 +33,9 @@ artifacts/
 migration-backup/
 
 desktop-release/
+
+.preview-build/
+
+# Local installer builds and image-generation metadata
+desktop-release*/
+resources/mascots/*-generation.json

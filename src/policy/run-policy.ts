@@ -93,7 +93,7 @@ export function evaluateRunPolicy(input: RunPolicyInput): RunPolicyResult {
   if (input.profileConfig.workbench) {
     if (input.access.reason !== 'owner') return reject('document-permission-unverified', '尚未验证调用者的文档权限；为防止借用机器人权限，当前仅允许创建者发起本机任务。');
     const group = input.scope.chatId ? input.profileConfig.workbench.groups[input.scope.chatId] : undefined;
-    if (group?.skillIsolation === 'strict' && input.profileConfig.agentKind !== 'codex') return reject('skill-isolation-unavailable', '本群要求严格技能隔离，但当前本机 Agent 尚未接入隔离执行环境。任务已阻止，不会回退到本机全权限运行。');
+    if (group?.skillIsolation === 'strict') return reject('skill-isolation-unavailable', 'Docker 严格隔离已禁用，请在工作台切换为本机工作目录模式后再运行。');
     if (group?.documents.length) return reject('document-permission-unverified', '已设置严格文档白名单，但本机 CLI 尚不能强制执行逐文档权限边界。本次任务已拒绝，未将资料交给 Agent。');
   }
   if (!input.access.ok) {

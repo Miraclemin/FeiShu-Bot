@@ -126,7 +126,7 @@ export function ConfigView({ profile }: { profile: string }) {
 
   return (
     <div className="space-y-4">
-      <Card>
+      {!cfg.workbenchProtected && <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>运行模式</CardTitle>
           <Badge variant={cfg.live ? "success" : "secondary"}>
@@ -139,7 +139,7 @@ export function ConfigView({ profile }: { profile: string }) {
               options={[["personal", "个人版（默认）"], ["team", "团队版"]]} />
           </Field>}
         </CardContent>
-      </Card>
+      </Card>}
 
       <Card>
         <CardHeader><CardTitle>回复与运行</CardTitle></CardHeader>
@@ -480,7 +480,7 @@ function MeetingCard({ profile, cfg, onChange }: {
                 </div>
                 {live.push.hooked && live.push.received === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    钩子已装好但还没收到事件。确认开发者后台已用「长连接」模式订阅 vc.bot.* 三个事件；期间靠轮询兜底，功能可用。
+                    钩子已装好但还没收到事件。确认开发者后台已用「长连接」模式订阅 vc.bot.* 三个事件；期间通过轮询尝试接收，请以实际字幕条数为准。
                   </p>
                 )}
                 {!live.push.hooked && live.push.reason && (
@@ -497,6 +497,12 @@ function MeetingCard({ profile, cfg, onChange }: {
                         <div className="truncate text-xs text-muted-foreground">
                           {s.meetingNo} · {s.source === "push" ? "推送" : "轮询"} · 字幕 {s.transcriptLines} 条 · 参会 {s.participants} 人
                         </div>
+                        <div className="text-xs text-muted-foreground">
+                          已接收 {s.totalTranscriptLines ?? s.transcriptLines} 句 · {s.lastTranscriptAt
+                            ? `最后字幕：${new Date(s.lastTranscriptAt).toLocaleTimeString()}` : "等待会议字幕"}
+                        </div>
+                        {s.transcriptFile && <div className="break-all text-xs text-muted-foreground">逐字稿：{s.transcriptFile}</div>}
+                        {s.archiveError && <div className="text-xs text-destructive">逐字稿保存失败：{s.archiveError}</div>}
                         {/* Which activity types actually arrived — tells apart
                             "nothing was sent" from "sent but unparsed" (`?`). */}
                         <div className="truncate text-xs text-muted-foreground">

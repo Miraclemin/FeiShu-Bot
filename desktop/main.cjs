@@ -21,8 +21,9 @@ else {
     const { startDesktopHost } = await import(pathToFileURL(join(__dirname, '..', 'dist', 'desktop-host.js')).href);
     // Trial uses its own configuration, never replaces running Bridge services.
     host = await startDesktopHost(process.env.LARK_WORKBENCH_HOME || join(homedir(), '.lark-workbench'));
+    if (process.platform === 'darwin') app.dock?.setIcon(join(__dirname, '..', 'resources', 'branding', 'icon.png'));
     window = new BrowserWindow({ width: 1100, height: 840, minWidth: 760, minHeight: 600,
-      title: 'feishu-collaborator', backgroundColor: '#ffffff',
+      title: 'feishu-collaborator', icon: join(__dirname, '..', 'resources', 'branding', 'icon.png'), backgroundColor: '#ffffff',
       webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('https://')) void shell.openExternal(url);
@@ -36,6 +37,14 @@ else {
     ipcMain.handle('workbench:copy-query-permissions', (event) => {
       if (event.sender !== window.webContents || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
       clipboard.writeText(JSON.stringify({ scopes: { tenant: [], user: ['contact:user:search', 'im:chat:read'] } }, null, 2));
+      return true;
+    });
+    ipcMain.handle('workbench:copy-permission-preset', (event, ids) => {
+      if (event.sender !== window.webContents || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
+      const presets = require('../resources/permission-presets.json');
+      if (!Array.isArray(ids) || ids.length > presets.length || ids.some(id => !presets.some(p => p.id === id))) throw new Error('Invalid permission presets');
+      const selected = presets.filter(p => ids.includes(p.id));
+      clipboard.writeText(JSON.stringify({ scopes: { tenant: [...new Set(selected.flatMap(p => p.tenant))], user: [...new Set(selected.flatMap(p => p.user))] } }, null, 2));
       return true;
     });
     ipcMain.handle('workbench:choose-directory', async (event) => {

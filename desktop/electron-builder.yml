@@ -8,17 +8,20 @@ files:
   - desktop/main.cjs
   - desktop/preload.cjs
   - resources/**
+  - "!resources/mascots/*-generation.json"
   - package.json
 asar: true
 asarUnpack:
   - resources/**
 mac:
+  icon: resources/branding/icon.icns
   identity: "-"
   category: public.app-category.productivity
   target:
     - target: dmg
       arch: [arm64, x64]
 win:
+  icon: resources/branding/icon.ico
   target:
     - target: nsis
       arch: [x64]

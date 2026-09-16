@@ -6,8 +6,17 @@ import type { CommandContext } from '../commands/index';
 
 export const projectRunContext = new AsyncLocalStorage<NodeJS.ProcessEnv>();
 // Both source execution and the bundled dist/cli.js locate packaged resources.
-export function registryScript(): string {
-  return fileURLToPath(new URL(import.meta.url.includes('/src/team/') ? '../../resources/project_registry.py' : '../resources/project_registry.py', import.meta.url));
+export function registryScript(moduleUrl = import.meta.url): string {
+  const path = fileURLToPath(new URL(moduleUrl.includes('/src/team/') ? '../../resources/project_registry.py' : '../resources/project_registry.py', moduleUrl));
+  // Python is an external process: Electron's virtual ASAR filesystem is not
+  // available to it. electron-builder unpacks resources beside app.asar.
+  return path.replace(/([/\\])app\.asar([/\\])/, '$1app.asar.unpacked$2');
+}
+const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+export function projectBindingHint(profile: string, chatId: string, topicId?: string): string {
+  const command = `python3 ${shellQuote(registryScript())} show --profile ${shellQuote(profile)} --chat ${shellQuote(chatId)}${topicId ? ' --topic ' + shellQuote(topicId) : ''}`;
+  return `仅在需要读取或修改项目源码、产品、需求表、Bug表等项目资源时，先执行 ${command}。使用返回的源码、网址、表格，不用Skill旧项目常量；未绑定或检查失败只停止项目资源读写。新项目先验证表字段和权限。\n` +
+    `读取、搜索或总结当前群聊天不依赖项目绑定，不执行项目绑定脚本，也不加载无关的项目巡检流程；即使之前项目检查失败也可继续群消息任务。需要群历史时使用本群启用的飞书IM技能，按当前群ID ${chatId} 主动读取消息，不把本次@消息当作完整历史。保持当前机器人配置和身份权限，不能切换其他账号绕过权限；读取失败时说明真实错误和已读取范围，不编造总结。`;
 }
 export interface ProjectBinding {
   role: string; chat_id: string; topic_id?: string | null; missing: string[];

@@ -1,3 +1,5 @@
+import { listBaseTables } from './base-picker';
+import { checkWorkbench } from './workbench-check';
 import { discoverSkills } from '../agent/workbench-skills';
 import { searchDirectoryUsers, startDirectoryLogin } from '../lark-cli/user-im';
 import { agentInventory, getWorkbench, updateWorkbench } from './workbench';
@@ -25,7 +27,7 @@ import {
   userLoginComplete,
   userLoginStart,
 } from './api';
-import { activateProfile, listBots, listProfiles } from './fleet';
+import { activateProfile, listBots, listProfiles, renameProfile, setProfileAvatar } from './fleet';
 import { onboardCreate, onboardState, onboardValidate } from './onboard';
 import { finishQrRegistration, qrStatus, startQrRegistration } from './qr-register';
 import {
@@ -145,6 +147,18 @@ async function route(
   }
 
   if (path === '/api/agents' && g) { sendJson(res, 200, { agents: await agentInventory() }); return; }
+  if (path === '/api/workbench/base-tables' && p) {
+    const profile=url.searchParams.get('profile'); if(!profile) throw new HttpError(400,'Missing profile');
+    const body=await readJsonBody(req) as {link:string;offset?:number};
+    try { sendJson(res,200,await listBaseTables(profile,body.link,body.offset ?? 0,deps.rootDir)); }
+    catch(e) { if(e instanceof HttpError) throw e; throw new HttpError(400,e instanceof Error ? e.message : '读取数据表失败，请稍后重试'); }
+    return;
+  }
+  if (path === '/api/workbench/check' && p) {
+    const profile = url.searchParams.get('profile');
+    if (!profile) throw new HttpError(400, 'Missing profile');
+    sendJson(res, 200, await checkWorkbench(profile, await readJsonBody(req), deps.rootDir)); return;
+  }
   if (path === '/api/workbench') {
     const profile = url.searchParams.get('profile');
     if (!profile) throw new HttpError(400, '缺少 Agent');
@@ -160,6 +174,18 @@ async function route(
   // --- profiles ---
   if (path === '/api/profiles' && g) {
     sendJson(res, 200, { profiles: await listProfiles(sup, deps.rootDir) });
+    return;
+  }
+  if (path === '/api/profiles/avatar' && p) {
+    const body = await readJsonBody(req) as { profile?: string; avatarId?: unknown };
+    if (!body.profile) throw new HttpError(400, 'profile is required');
+    sendJson(res, 200, await setProfileAvatar(body.profile, body.avatarId, deps.rootDir));
+    return;
+  }
+  if (path === '/api/profiles/rename' && p) {
+    const body = await readJsonBody(req) as { profile?: string; displayName?: unknown };
+    if (!body.profile) throw new HttpError(400, 'profile is required');
+    sendJson(res, 200, await renameProfile(body.profile, body.displayName, deps.rootDir));
     return;
   }
   if (path === '/api/profiles/start' && p) {

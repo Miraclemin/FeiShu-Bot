@@ -93,7 +93,7 @@ export async function startRunFlow(input: StartRunFlowInput): Promise<StartRunFl
   const policy = evaluateRunPolicy({
     scope: input.scope,
     attachments: input.attachments,
-    prompt: group?.persona ? `群角色要求：\n${group.persona}\n\n${input.prompt}` : input.prompt,
+    prompt: group?.project ? `Group project data: ${JSON.stringify({role: group.role, project: group.project, resources: group.resources, workspace: group.workspace})}\nUse these bindings; do not call legacy profile-name binding scripts. Report missing fields.\n${group.persona}\n${input.prompt}` : group?.persona ? `群角色要求：\n${group.persona}\n\n${input.prompt}` : input.prompt,
     requestedCwd,
     cwdRealpath: workspace.cwdRealpath,
     access: input.access,

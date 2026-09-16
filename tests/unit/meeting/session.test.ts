@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MEETING_DEFAULTS, type MeetingConfig } from '../../../src/config/profile-schema';
 import { MeetingSession } from '../../../src/meeting/session';
@@ -271,16 +274,84 @@ describe('MeetingSession ingest pipeline', () => {
     expect(seen).toEqual(['第一句', '第二句']);
   });
 
-  it('stops polling once push takes over, so events stop arriving twice', () => {
-    const s = session();
+  it('keeps polling after push and recovers missing subtitles without double delivery', async () => {
+    vi.useFakeTimers();
+    const item = transcriptItem('e1', [{ sentence_id: 1, text: '推送字幕' }]);
+    const missed = transcriptItem('e2', [{ sentence_id: 2, text: '断线期间字幕' }]);
+    const request = vi.fn()
+      .mockResolvedValueOnce({ code: 0, data: { events: [item], page_token: 'cursor1' } })
+      .mockResolvedValue({ code: 0, data: { events: [missed], page_token: 'cursor2' } });
+    const s = new MeetingSession({ client: { request }, meetingId: '70001', meetingNo: '123456789', config: cfg() });
+    const seen: string[] = [];
+    s.on('transcript', e => { if (e.kind === 'transcript') seen.push(e.text); });
     s.startPolling();
-    // Handing over is the point: both lanes carry the same content.
+    s.markPushActive();
+    s.ingest(item);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual(['推送字幕']);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(seen).toEqual(['推送字幕', '断线期间字幕']);
+    expect(request.mock.calls[1]?.[0].params.page_token).toBe('cursor1');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(s.status().source).toBe('poll');
     s.markPushActive();
     expect(s.status().source).toBe('push');
-    // Idempotent — a second push must not re-enter the handover.
-    s.markPushActive();
-    expect(s.status().source).toBe('push');
+    s.dispose();
+    const calls = request.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(request).toHaveBeenCalledTimes(calls);
   });
+
+  it('flushes the final pending subtitle when the meeting ends', () => {
+    vi.useFakeTimers();
+    const s = session(cfg({ transcript: { keep: 200, stabilizeMs: 800 } }));
+    s.ingest(transcriptItem('e1', [{ sentence_id: 1, text: '最后一句' }]));
+    expect(s.recentTranscript()).toEqual([]);
+    s.markEnded();
+    expect(s.recentTranscript()).toEqual(['?: 最后一句']);
+    vi.advanceTimersByTime(1000);
+    expect(s.recentTranscript()).toEqual(['?: 最后一句']);
+  });
+
+  it('archives all received revisions beyond the rolling context and survives a new session', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'meeting-transcript-'));
+    try {
+      const s = new MeetingSession({ client: noopClient, meetingId: '70001', meetingNo: '123456789',
+        config: cfg({ transcript: { keep: 2, stabilizeMs: 0 } }), transcriptDir: dir });
+      for (let i = 1; i <= 5; i++) s.ingest(transcriptItem(`e${i}`, [{ sentence_id: i, text: `第${i}句` }]));
+      s.ingest(transcriptItem('e6', [{ sentence_id: 5, text: '第五句定稿' }]));
+      await s.flushTranscript();
+      expect(s.recentTranscript()).toHaveLength(2);
+      expect(s.status().totalTranscriptLines).toBe(5);
+      const file = s.status().transcriptFile!;
+      const records = (await readFile(file, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+      expect(records).toHaveLength(6);
+      expect(records[0].text).toBe('第1句');
+      expect(records[5]).toMatchObject({ sentenceId: '5', text: '第五句定稿' });
+      s.dispose();
+      const next = new MeetingSession({ client: noopClient, meetingId: '70001', meetingNo: '123456789', config: cfg(), transcriptDir: dir });
+      next.ingest(transcriptItem('e7', [{ sentence_id: 6, text: '重入后' }]));
+      await next.flushTranscript();
+      expect((await readFile(file, 'utf8')).trim().split('\n')).toHaveLength(7);
+      next.dispose();
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it('reports archive failure while continuing to collect subtitles', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'meeting-transcript-error-'));
+    try {
+      const { writeFile } = await import('node:fs/promises');
+      const blocked = join(dir, 'file');
+      await writeFile(blocked, 'not a directory');
+      const s = new MeetingSession({ client: noopClient, meetingId: '1', meetingNo: '123456789', config: cfg(), transcriptDir: blocked });
+      s.ingest(transcriptItem('e1', [{ sentence_id: 1, text: '继续接收' }]));
+      await s.flushTranscript();
+      expect(s.status().archiveError).toBeTruthy();
+      expect(s.recentTranscript()).toEqual(['?: 继续接收']);
+      s.dispose();
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+
 });
 
 describe('in-meeting trigger matching', () => {

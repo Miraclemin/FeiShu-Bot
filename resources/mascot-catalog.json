@@ -1,0 +1,8 @@
+[
+  {"id":"dog-a1","label":"小狗 · 陪伴","corner":"lower-left"},
+  {"id":"dog-a2","label":"小狗 · 守候","corner":"lower-right"},
+  {"id":"otter-b1","label":"水獭 · 动手","corner":"lower-left"},
+  {"id":"otter-b2","label":"水獭 · 协作","corner":"lower-right"},
+  {"id":"owl-c1","label":"猫头鹰 · 观察","corner":"lower-left"},
+  {"id":"owl-c2","label":"猫头鹰 · 洞察","corner":"lower-right"}
+]

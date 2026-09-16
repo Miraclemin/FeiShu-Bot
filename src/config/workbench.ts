@@ -1,5 +1,8 @@
 import { isAbsolute } from 'node:path';
 export interface GroupWorkspace {
+  resources?: string[];
+  role?: string;
+  project?: { name: string; url: string; requirements: string; bugs: string };
   skillIsolation?: 'strict' | 'catalog';
   enabled: boolean;
   name: string;
@@ -33,7 +36,14 @@ export function normalizeWorkbench(value: unknown): WorkbenchConfig | undefined 
     const skills = Array.isArray(g.skills) ? g.skills.map(String) : [];
     if (skills.length > 100 || skills.some(id => !/^[a-f0-9]{24}$/.test(id))) throw new Error('技能选择无效，最多选择 100 个技能');
     if (g.skillIsolation !== undefined && !['strict', 'catalog'].includes(String(g.skillIsolation))) throw new Error('技能隔离模式无效');
-    groups[id] = { skillIsolation: g.skillIsolation === 'strict' ? 'strict' : 'catalog', enabled: g.enabled === true, name: String(g.name ?? '').slice(0, 150),
+    const role = ['product-manager', 'developer', 'inspector'].includes(String(g.role)) ? String(g.role) : undefined;
+    const pr = (g.project ?? {}) as Record<string, unknown>;
+    const project = { name: String(pr.name ?? '').slice(0,200), url: String(pr.url ?? ''), requirements: String(pr.requirements ?? ''), bugs: String(pr.bugs ?? '') };
+    for (const key of ['url','requirements','bugs'] as const) if (project[key]) { const u = new URL(project[key]); if (u.protocol !== 'https:' || u.username || u.password) throw new Error('Use HTTPS project links without credentials'); }
+    const resources = [...new Set((Array.isArray(g.resources) ? g.resources.map(String) : [project.requirements, project.bugs].filter(Boolean)))];
+    if (resources.length > 300) throw new Error('最多添加 300 份资料');
+    for (const link of resources) { const u = new URL(link); if(u.protocol !== 'https:' || u.username || u.password || !/(^|\.)(feishu\.cn|larksuite\.com)$/.test(u.hostname)) throw new Error('请填写飞书资料 HTTPS 链接'); }
+    groups[id] = { resources, role, project, skillIsolation: g.skillIsolation === 'strict' ? 'strict' : 'catalog', enabled: g.enabled === true, name: String(g.name ?? '').slice(0, 150),
       workspace, persona: String(g.persona ?? '').slice(0, 8000), documents: [...new Set(documents)], skills: [...new Set(skills)] };
   }
   return { revision: Number.isSafeInteger(raw.revision) ? Number(raw.revision) : 0, protectDocuments: true, groups };

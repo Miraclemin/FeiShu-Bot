@@ -1,7 +1,7 @@
 # feishu-collaborator试用版
 
 本次实现：Electron + React + TypeScript，复用 Bridge 的本地服务与适配器。
-源码构建基于 macOS，提供 Mac arm64/x64 和 Windows x64/ARM64 安装产物；Windows 安装运行需要在 Windows 真机验收。
+源码构建基于 macOS，提供 Mac arm64/x64 和 Windows x64 安装产物；Windows 安装运行需要在 Windows 真机验收。
 
 ## 启动
 
@@ -71,8 +71,14 @@
 
 注意旧 CLI 的 `user-default` 策略实际是 `strictMode=off`、`defaultAs=auto`，表示允许使用用户身份，并非强制每次使用用户身份。因此不能把这个选项本身当作调用者文档权限隔离。上面的“用户无权限就读取失败”指明确用该用户的 token 调用该接口的情况。工作台保护模式仍固定 `bot-only` 并限制为创建者执行。
 
-### Strict skill isolation (Codex preview)
+### Disabled: historical strict skill isolation prototype
 
 Build `docker build -t lark-skill-sandbox:codex-v1 resources/skill-sandbox` and start Docker Desktop on Mac/Windows. Enable strict skill isolation per group. Only Codex is supported; other engines fail closed. Each run copies selected skill directories and a bounded workspace snapshot, rejects links/special files, excludes native discovery directories, and mounts no host home or Docker socket. Skills are read-only. Changes are not written back. Feishu credentials and personal CLI configuration are not forwarded. Provider authentication is copied privately for the run. Internet access remains enabled for model calls; this is local filesystem isolation, not a network allowlist or a prohibition on generating equivalent code. Workspace files are still readable by the agent; use a dedicated project directory. Windows and other engines require separate runtime acceptance before production use.
 
 Validation: 2026-09-13 macOS Docker filesystem probe passed (selected read, unselected/host path absent, selected write rejected); 19 targeted unit/integration tests passed. Live model acceptance failed because the container could not connect to chatgpt.com; interrupted and cleaned up. Not production-ready or included in desktop installers.
+
+Docker execution is now disabled in the runtime. The supported flow runs the native CLI in the configured group workspace. Skill selection is a loading catalog, not a filesystem ACL. Historical strict settings remain fail-closed until the owner explicitly switches the group to native workspace mode.
+
+### Up-front permission preparation
+
+The workbench and directory authorization views share a permission preparation panel. Presets cover messaging, user directory/group selection, document reading, and Base table/record reading; record and document writes are opt-in. The desktop copies a validated preset-only JSON payload and opens the current app's permission console. This does not grant scopes, publish an app, complete user OAuth, or share any document. Platform confirmation/review and resource sharing remain required. Presets cover the built-in workflows, not arbitrary third-party skill permissions. Permission-bearing deep links are convenience links with bulk JSON import as fallback.

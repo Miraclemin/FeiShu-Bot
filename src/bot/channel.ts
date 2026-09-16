@@ -1,4 +1,4 @@
-import { projectRunContext, registryScript } from '../team/project-bindings';
+import { projectRunContext, projectBindingHint } from '../team/project-bindings';
 import type {
   LarkChannel,
   LarkChannelOptions,
@@ -437,6 +437,8 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
     meetingManager = new MeetingManager({
       client: channel.rawClient as unknown as VcRequestClient,
       config: meetingConfig,
+      ...(deps.appPaths?.mediaDir
+        ? { transcriptDir: join(dirname(deps.appPaths.mediaDir), 'meeting-transcripts') } : {}),
       botOpenId: () => channel.botIdentity?.openId,
       channel,
       // Meeting over: optionally summarize to IM (config-gated inside).
@@ -916,7 +918,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
       ]
     : undefined;
 
-  const bindingHint = `项目配置必须先执行 python3 ${JSON.stringify(registryScript())} show --profile ${controls.profile} --chat ${chatId}${mode === 'topic' && threadId ? ' --topic ' + threadId : ''}。使用返回的源码、网址、表格，不用Skill旧项目常量；未绑定停止项目读写。新项目先验证表字段和权限。`;
+  const bindingHint = projectBindingHint(controls.profile, chatId, mode === 'topic' ? threadId : undefined);
   const prompt = bindingHint + '\n\n' + buildPrompt(
     batch,
     attachments,

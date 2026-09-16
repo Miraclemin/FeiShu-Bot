@@ -179,9 +179,10 @@ export function resumeCard(cwd: string, entries: ResumeEntry[]): object {
   return shell('🔁 恢复历史会话', elements);
 }
 
-export function helpCard(agentName = 'Agent'): object {
+export function helpCard(agentName = 'Agent', groupSkills?: string): object {
   const escapedAgentName = escapeMd(agentName);
   return shell('💡 使用帮助', [
+    ...(groupSkills !== undefined ? [divMd('**本群配置的 Skills**\n' + escapeMd(groupSkills) + '\n\n此清单是加载提示，不代表本次任务已使用这些技能，也不是严格隔离或权限白名单。'), HR] : []),
     divMd(
       [
         '**命令列表**',
@@ -202,7 +203,7 @@ export function helpCard(agentName = 'Agent'): object {
         '- `/exit <id|#>` — 关掉指定 bot(用 `/ps` 看 id/序号)',
         '- `/reconnect` — 强制重连 WebSocket(网络抖动后 bot 没反应时用)',
         `- \`/doctor [描述]\` — 把日志和描述交给 ${escapedAgentName} 自助诊断`,
-        '- `/help` — 本帮助',
+        '- `/help` / `/usage` — 使用帮助与本群 Skills',
         '',
         `其他内容直接交给 ${escapedAgentName}。`,
       ].join('\n'),

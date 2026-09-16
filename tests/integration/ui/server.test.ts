@@ -107,6 +107,44 @@ afterEach(async () => {
 });
 
 describe('ui server (supervisor-backed)', () => {
+  it('persists a display name without changing identity or interrupting an online profile', async () => {
+    const before = (await loadRootConfig(configPath))!;
+    const controls = online.get('claude');
+    const res = await post('/api/profiles/rename', handle.token, { profile: 'claude', displayName: '  我的研发助手  ' });
+    expect(res.status).toBe(200);
+    const after = (await loadRootConfig(configPath))!;
+    expect(after.profiles.claude).toEqual({ ...before.profiles.claude, displayName: '我的研发助手' });
+    expect(after.activeProfile).toBe(before.activeProfile);
+    expect(online.get('claude')).toBe(controls);
+    const listed = await json(await get('/api/profiles', handle.token));
+    expect(listed.profiles.find((p: {name: string}) => p.name === 'claude')).toMatchObject({ displayName: '我的研发助手', running: true });
+    for (const displayName of ['', '  ', 'x'.repeat(81), 'bad\nname']) {
+      expect((await post('/api/profiles/rename', handle.token, { profile: 'claude', displayName })).status).toBe(400);
+    }
+    expect((await post('/api/profiles/rename', handle.token, { profile: 'missing', displayName: 'name' })).status).toBe(404);
+    expect((await post('/api/profiles/rename', 'bad-token', { profile: 'claude', displayName: 'name' })).status).toBe(401);
+  });
+
+  it('assigns a stable default avatar and persists a user selection without restarting', async () => {
+    const initial = await json(await get('/api/profiles', handle.token));
+    const original = initial.profiles.find((p: {name: string}) => p.name === 'claude').avatarId;
+    expect(original).toMatch(/^(dog-a[12]|otter-b[12]|owl-c[12])$/);
+    const controls = online.get('claude');
+    await post('/api/profiles/rename', handle.token, { profile: 'claude', displayName: '新名字' });
+    const renamed = await json(await get('/api/profiles', handle.token));
+    expect(renamed.profiles.find((p: {name: string}) => p.name === 'claude').avatarId).toBe(original);
+    expect((await post('/api/profiles/avatar', handle.token, { profile: 'claude', avatarId: 'owl-c2' })).status).toBe(200);
+    expect((await loadRootConfig(configPath))!.profiles.claude!.avatarId).toBe('owl-c2');
+    const updated = await json(await get('/api/profiles', handle.token));
+    expect(updated.profiles.find((p: {name: string}) => p.name === 'claude').avatarId).toBe('owl-c2');
+    expect(online.get('claude')).toBe(controls);
+    for (const avatarId of ['../secret', 'https://example.com/image.png', '', null]) {
+      expect((await post('/api/profiles/avatar', handle.token, { profile: 'claude', avatarId })).status).toBe(400);
+    }
+    expect((await post('/api/profiles/avatar', 'bad-token', { profile: 'claude', avatarId: 'dog-a1' })).status).toBe(401);
+    expect((await post('/api/profiles/avatar', handle.token, { profile: 'missing', avatarId: 'dog-a1' })).status).toBe(404);
+  });
+
   it('rejects API calls without the token', async () => {
     expect((await get('/api/status')).status).toBe(401);
     expect((await get('/api/config', 'wrong-token-value')).status).toBe(401);

@@ -1,3 +1,5 @@
+import { appendFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { log } from '../core/logger';
 import type { MeetingConfig } from '../config/profile-schema';
 import {
@@ -19,6 +21,10 @@ export interface MeetingSessionStatus {
   /** Where in-meeting content is currently coming from. */
   source: MeetingEventSourceKind;
   transcriptLines: number;
+  totalTranscriptLines: number;
+  lastTranscriptAt?: string;
+  transcriptFile?: string;
+  archiveError?: string;
   participants: number;
   /** Pushes/polls ingested — a quick health signal for the console. */
   ingested: number;
@@ -43,6 +49,7 @@ export interface MeetingSessionDeps {
   /** Chat that started this session — where IM answers go back to. */
   originChatId?: string;
   now?: () => number;
+  transcriptDir?: string;
 }
 
 /**
@@ -78,6 +85,12 @@ export class MeetingSession {
   private ingested = 0;
   private eventCounts: Record<string, number> = {};
   private cursor?: string;
+  private lastPushAt?: number;
+  private lastTranscriptAt?: string;
+  private transcriptFile?: string;
+  private archiveError?: string;
+  private archiveQueue: Promise<void> = Promise.resolve();
+  private pendingEvents = new Map<string, TranscriptEvent>();
   private poller?: ReturnType<typeof setTimeout>;
   private idleRounds = 0;
   private stopped = false;
@@ -94,6 +107,10 @@ export class MeetingSession {
     if (deps.originChatId) this.originChatId = deps.originChatId;
     this.now = deps.now ?? (() => Date.now());
     this.startedAt = new Date(this.now()).toISOString();
+    if (deps.transcriptDir) {
+      const safeId = Buffer.from(this.meetingId).toString('hex');
+      this.transcriptFile = join(deps.transcriptDir, `${safeId}.jsonl`);
+    }
   }
 
   status(): MeetingSessionStatus {
@@ -104,6 +121,10 @@ export class MeetingSession {
       startedAt: this.startedAt,
       source: this.source,
       transcriptLines: this.transcript.length,
+      totalTranscriptLines: this.sentences.size,
+      ...(this.lastTranscriptAt ? { lastTranscriptAt: this.lastTranscriptAt } : {}),
+      ...(this.transcriptFile ? { transcriptFile: this.transcriptFile } : {}),
+      ...(this.archiveError ? { archiveError: this.archiveError } : {}),
       participants: this.participantIds.size,
       ingested: this.ingested,
       eventCounts: { ...this.eventCounts },
@@ -126,19 +147,11 @@ export class MeetingSession {
     return slice.map((l) => `${l.speaker}: ${l.text}`);
   }
 
-  /**
-   * Events are arriving via push. Polling was the primary lane until now; keep
-   * both and every event is delivered twice, so hand over and stop the poller.
-   * The push lane is what the protocol intends for TAT; `bots/events` stays
-   * available for an explicit gap-fill.
-   */
+  /** Keep a low-frequency cursor-based gap-fill even while push is healthy. */
   markPushActive(): void {
-    if (this.source === 'push') return;
+    if (this.stopped || this.ended) return;
+    this.lastPushAt = this.now();
     this.source = 'push';
-    if (this.poller) {
-      this.stopPolling();
-      log.info('meeting', 'poll-stopped-push-active', { meetingId: this.meetingId });
-    }
   }
 
   /**
@@ -146,7 +159,7 @@ export class MeetingSession {
    * and poll/push overlap during gap-fill collapse to one delivery.
    */
   ingest(item: RawActivityItem): void {
-    if (this.ended) return;
+    if (this.ended || this.stopped) return;
     // Push and poll deliver the *same* content by design (poll is the gap-fill
     // lane), so every item can arrive twice. `event_id` is the intended dedup
     // key, but it isn't always present — without a fallback a duplicate chat
@@ -206,6 +219,9 @@ export class MeetingSession {
     if (event.selfEcho) return;
     if (this.sentences.get(event.sentenceId) === event.text) return; // exact repeat
     this.sentences.set(event.sentenceId, event.text);
+    this.lastTranscriptAt = new Date(this.now()).toISOString();
+    // Save every received revision before debounce so shutdown cannot lose it.
+    this.archive(event);
 
     const stabilizeMs = this.config.transcript.stabilizeMs;
     if (stabilizeMs <= 0) {
@@ -215,13 +231,38 @@ export class MeetingSession {
     // Debounce: a sentence is "final" once it stops growing for stabilizeMs.
     const prior = this.pending.get(event.sentenceId);
     if (prior) clearTimeout(prior);
+    this.pendingEvents.set(event.sentenceId, event);
     this.pending.set(
       event.sentenceId,
       setTimeout(() => {
         this.pending.delete(event.sentenceId);
+        this.pendingEvents.delete(event.sentenceId);
         this.commitTranscript(event);
       }, stabilizeMs),
     );
+  }
+
+  private archive(event: TranscriptEvent): void {
+    const file = this.transcriptFile;
+    if (!file) return;
+    const record = JSON.stringify({
+      meetingId: this.meetingId, meetingNo: this.meetingNo,
+      receivedAt: this.lastTranscriptAt, sentenceId: event.sentenceId,
+      speaker: event.speaker, text: event.text,
+      startMs: event.startMs, endMs: event.endMs,
+    }) + '\n';
+    this.archiveQueue = this.archiveQueue.then(async () => {
+      await mkdir(join(file, '..'), { recursive: true, mode: 0o700 });
+      await appendFile(file, record, { encoding: 'utf8', mode: 0o600 });
+    }).catch((err) => {
+      this.archiveError = String(err);
+      log.warn('meeting', 'transcript-save-failed', { meetingId: this.meetingId, err: String(err) });
+    });
+  }
+
+  /** Await pending disk writes, including on orderly leave. */
+  async flushTranscript(): Promise<void> {
+    await this.archiveQueue;
   }
 
   /** Append (or replace) the sentence in the rolling buffer, then fan out. */
@@ -262,9 +303,12 @@ export class MeetingSession {
    * proven, and as gap-fill afterwards. Idle rounds back off to 10s.
    */
   startPolling(): void {
-    if (this.poller || this.stopped) return;
+    if (this.poller || this.stopped || this.ended) return;
     const tick = async (): Promise<void> => {
       if (this.stopped || this.ended) return;
+      if (this.lastPushAt === undefined || this.now() - this.lastPushAt >= 30_000) {
+        this.source = 'poll';
+      }
       try {
         const page = await fetchMeetingEvents(this.client, {
           meetingId: this.meetingId,
@@ -281,7 +325,8 @@ export class MeetingSession {
       }
       if (this.stopped || this.ended) return;
       const base = this.config.pollIntervalMs;
-      const delay = this.idleRounds < 0 ? 0 : Math.min(base * 2 ** this.idleRounds, 10_000);
+      const delay = this.idleRounds < 0 ? 0 : this.source === 'push'
+        ? 10_000 : Math.min(base * 2 ** this.idleRounds, 10_000);
       this.poller = setTimeout(() => void tick(), delay);
     };
     this.poller = setTimeout(() => void tick(), 0);
@@ -303,6 +348,8 @@ export class MeetingSession {
     this.stopPolling();
     for (const timer of this.pending.values()) clearTimeout(timer);
     this.pending.clear();
+    for (const event of this.pendingEvents.values()) this.commitTranscript(event);
+    this.pendingEvents.clear();
   }
 
   /** Leave the meeting. Idempotent — safe to call after the meeting ended. */
@@ -310,6 +357,7 @@ export class MeetingSession {
     if (this.leaving) return;
     this.leaving = true;
     this.stopTimers();
+    await this.flushTranscript();
     if (this.ended) return; // already over; nothing to leave
     this.ended = true;
     await leaveMeeting(this.client, this.meetingId).catch((err) =>

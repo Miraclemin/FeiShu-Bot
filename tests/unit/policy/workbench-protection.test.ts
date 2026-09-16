@@ -33,7 +33,7 @@ describe('native CLI document protection', () => {
 });
 
 describe('strict skill isolation', () => {
-  it.each(['claude', 'hermes', 'openclaw'] as const)('blocks %s before native execution without an isolation runner', agentKind => {
+  it.each(['codex', 'claude', 'hermes', 'openclaw'] as const)('blocks %s before native execution without an isolation runner', agentKind => {
     const cfg = profile(); cfg.agentKind = agentKind;
     cfg.workbench!.groups.oc_team!.skillIsolation = 'strict';
     const result = evaluateRunPolicy({ scope: { source: 'im', actorId: 'ou_owner', chatId: 'oc_team' }, attachments: [], prompt: 'read any unselected skill', requestedCwd: '/workspace', cwdRealpath: '/workspace', access: { ok: true, reason: 'owner' }, capability: capabilityFor(cfg), profileConfig: cfg, now: 0 });

@@ -1,3 +1,4 @@
+import { defaultAvatarId, isAvatarId } from '../config/avatar';
 import { resolveAppPaths } from '../config/app-paths';
 import {
   loadRootConfig,
@@ -11,6 +12,8 @@ import { HttpError } from './http';
 import type { UiSupervisor } from './types';
 
 export interface ProfileSummary {
+  avatarId?: string;
+  displayName?: string;
   name: string;
   agentKind: AgentKind;
   active: boolean;
@@ -53,6 +56,8 @@ export async function listProfiles(
   const profiles = await listAllProfiles(rootDir).catch(() => []);
   return profiles.map((p) => ({
     name: p.name,
+    avatarId: p.avatarId ?? defaultAvatarId(p.name),
+    ...(p.displayName ? { displayName: p.displayName } : {}),
     agentKind: p.agentKind,
     active: p.active,
     running: supervisor.isOnline(p.name),
@@ -73,4 +78,33 @@ export async function activateProfile(
   });
   await writeActiveProfile(appPaths.rootDir, name);
   return { ok: true, active: name };
+}
+
+/** Change the UI name without changing the stable profile ID or restarting tasks. */
+export async function renameProfile(profile: string, name: unknown, rootDir?: string) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 80 || /[\x00-\x1f\x7f]/.test(name)) {
+    throw new HttpError(400, '名称需为 1–80 个字符，且不能包含控制字符');
+  }
+  const displayName = name.trim();
+  const { configFile } = resolveAppPaths({ rootDir });
+  await withConfigFileLock(configFile, async () => {
+    const root = await loadRootConfig(configFile);
+    if (!root?.profiles[profile]) throw new HttpError(404, 'Agent 不存在');
+    root.profiles[profile].displayName = displayName;
+    await saveRootConfig(root, configFile);
+  });
+  return { ok: true, displayName };
+}
+
+
+export async function setProfileAvatar(profile: string, avatarId: unknown, rootDir?: string) {
+  if (!isAvatarId(avatarId)) throw new HttpError(400, '请选择列表中的头像');
+  const { configFile } = resolveAppPaths({ rootDir });
+  await withConfigFileLock(configFile, async () => {
+    const root = await loadRootConfig(configFile);
+    if (!root?.profiles[profile]) throw new HttpError(404, 'Agent 不存在');
+    root.profiles[profile].avatarId = avatarId;
+    await saveRootConfig(root, configFile);
+  });
+  return { ok: true, avatarId };
 }

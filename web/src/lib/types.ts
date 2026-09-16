@@ -24,6 +24,8 @@ export interface BotInfo {
 }
 
 export interface ProfileInfo {
+  avatarId?: string;
+  displayName?: string;
   name: string;
   agentKind: AgentKind;
   active: boolean;
@@ -113,6 +115,10 @@ export interface MeetingSessionInfo {
   startedAt: string;
   source: "push" | "poll";
   transcriptLines: number;
+  totalTranscriptLines?: number;
+  lastTranscriptAt?: string;
+  transcriptFile?: string;
+  archiveError?: string;
   participants: number;
   ingested: number;
   /** Raw activity items per event type; `?`-prefixed keys were unparseable. */

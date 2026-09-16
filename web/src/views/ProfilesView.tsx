@@ -1,3 +1,4 @@
+import { AgentAvatar } from '@/components/AgentAvatar';
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
@@ -81,18 +82,17 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
           </p>
         )}
         {profiles?.map((p) => (
-          <button
-            key={p.name}
-            onClick={() => onOpen(p.name)}
-            className="flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors hover:bg-accent"
-          >
+          <div key={p.name} className="flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-colors hover:bg-accent/40">
+            <button className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onOpen(p.name)} aria-label={`打开 ${p.displayName || p.name}`}>
+            <AgentAvatar profile={p.name} avatarId={p.avatarId} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-medium">{p.name}</span>
+                <span className="font-medium break-all">{p.displayName || p.name}</span>
                 <Badge variant="secondary">{p.agentKind}</Badge>
                 {p.running ? <Badge variant="success">在线</Badge> : <Badge variant="outline">未运行</Badge>}
               </div>
             </div>
+            </button>
             {p.running ? (
               <Button
                 variant="destructive"
@@ -107,7 +107,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
               </Button>
             )}
             <ChevronRight className="text-muted-foreground" />
-          </button>
+          </div>
         ))}
       </div>
 

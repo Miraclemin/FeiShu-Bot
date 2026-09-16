@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ startRunFlow: vi.fn() }));
 
 vi.mock('../../../src/bot/run-flow', () => ({ startRunFlow: mocks.startRunFlow }));
 
-const { summarizeEndedMeeting, resolveSummaryTarget } = await import(
+const { summarizeEndedMeeting, resolveSummaryTarget, attachMeetingAgent } = await import(
   '../../../src/meeting/orchestrator'
 );
 const { MeetingSession } = await import('../../../src/meeting/session');
@@ -203,5 +203,27 @@ describe('resolveSummaryTarget', () => {
   it('returns undefined when neither lane exists', () => {
     expect(resolveSummaryTarget('origin', undefined, undefined)).toBeUndefined();
     expect(resolveSummaryTarget('owner', undefined, undefined)).toBeUndefined();
+  });
+});
+
+
+describe('continuous listening while answering', () => {
+  it('does not run the agent for speech and still collects subtitles during a text question', async () => {
+    const d = deps(cfg(), 'oc_team');
+    let finish!: (value: ReturnType<typeof fakeRun>) => void;
+    mocks.startRunFlow.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    attachMeetingAgent(d.args);
+    d.session.ingest({ event_id: 'speech2', activity_event_type: 'transcript_received',
+      transcript_received_items: [{ sentence_id: 2, text: '叫机器人也只是记录' }] });
+    expect(mocks.startRunFlow).not.toHaveBeenCalled();
+    d.session.ingest({ event_id: 'chat1', activity_event_type: 'chat_received',
+      chat_received_items: [{ content: '@bot 总结一下', message_type: 1 }] });
+    await vi.waitFor(() => expect(mocks.startRunFlow).toHaveBeenCalledTimes(1));
+    d.session.ingest({ event_id: 'speech3', activity_event_type: 'transcript_received',
+      transcript_received_items: [{ sentence_id: 3, text: '思考期间的新发言' }] });
+    expect(d.session.recentTranscript()).toContain('?: 思考期间的新发言');
+    finish(fakeRun('已总结'));
+    await vi.waitFor(() => expect(noopClient.request).toHaveBeenCalled());
+    d.session.dispose();
   });
 });

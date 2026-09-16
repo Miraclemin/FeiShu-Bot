@@ -151,6 +151,10 @@ describe('Claude slash command visible behavior', () => {
     expect(help).toContain('lark-cli 身份策略');
     expect(help).not.toContain('/lark');
     expect(help).not.toContain('交给 Claude');
+    expect(help).toContain('本群配置的 Skills');
+    expect(help).toContain('不是严格隔离');
+    await expect(h.run('/usage')).resolves.toBe(true);
+    expect(JSON.stringify(lastContent(h.channel))).toBe(help);
   });
 
   it('reports lark-cli user-ready for structured user records', async () => {

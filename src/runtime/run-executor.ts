@@ -1,4 +1,3 @@
-import { isolatedCodexRun } from '../agent/isolated-skills';
 import { randomUUID } from 'node:crypto';
 import type { AgentAdapter, AgentEvent, AgentRun } from '../agent/types';
 import { ActiveRuns, type RunHandle } from '../bot/active-runs';
@@ -110,8 +109,8 @@ export class RunExecutor {
     };
     let run: AgentRun;
     try {
-      if (input.policy.skillIsolation !== 'strict') await this.agent.prepareRun?.(runOptions);
-      else if (this.agent.id !== 'codex') throw new Error('当前引擎不支持严格技能隔离');
+      if (input.policy.skillIsolation === 'strict') throw new Error('Docker 隔离已禁用，请在工作台切换为本机工作目录模式');
+      await this.agent.prepareRun?.(runOptions);
     } catch (err) {
       release();
       releaseScope();
@@ -127,7 +126,7 @@ export class RunExecutor {
       );
     }
     try {
-      run = input.policy.skillIsolation === 'strict' ? isolatedCodexRun(runOptions) : this.agent.run(runOptions);
+      run = this.agent.run(runOptions);
     } catch (err) {
       release();
       releaseScope();

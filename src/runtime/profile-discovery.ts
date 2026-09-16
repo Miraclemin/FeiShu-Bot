@@ -5,6 +5,8 @@ import { loadRootConfig, readActiveProfile } from '../config/profile-store';
 import type { AgentKind } from '../config/profile-schema';
 
 export interface DiscoveredProfile {
+  avatarId?: string;
+  displayName?: string;
   name: string;
   active: boolean;
   agentKind: AgentKind;
@@ -46,6 +48,8 @@ export async function listAllProfiles(rootDir?: string): Promise<DiscoveredProfi
       if (!profile) throw new Error(`profile not found: ${name}`);
       return {
         name,
+        ...(profile.avatarId ? { avatarId: profile.avatarId } : {}),
+        ...(profile.displayName ? { displayName: profile.displayName } : {}),
         active: name === activeProfile,
         agentKind: profile.agentKind,
         profileDir: resolveAppPaths({ rootDir: rootPaths.rootDir, profile: name }).profileDir,

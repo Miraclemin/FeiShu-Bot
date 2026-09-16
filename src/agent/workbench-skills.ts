@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync, mkdtempSync, writeFileSync, rmSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -11,7 +12,7 @@ export interface SkillSelection { ids: string[]; }
 /** Read metadata only; never execute skill scripts while discovering. */
 export function discoverSkills(cwd?: string, extraRoots: string[] = []): WorkbenchSkill[] {
   const home = homedir();
-  const roots = [join(home, '.agents/skills'), join(process.env.CODEX_HOME || join(home, '.codex'), 'skills'),
+  const roots = [resolve(dirname(fileURLToPath(import.meta.url)), '../resources/skills'), resolve(dirname(fileURLToPath(import.meta.url)), '../../resources/skills'),join(home, '.agents/skills'), join(process.env.CODEX_HOME || join(home, '.codex'), 'skills'),
     join(home, '.claude/skills'), join(home, '.hermes/skills'), join(home, '.openclaw/skills'),
     join(home, '.codex/plugins/cache'), join(home, '.claude/plugins/cache'), '/etc/codex/skills', ...extraRoots];
   if (cwd) { let dir = resolve(cwd); while (true) { roots.push(join(dir, '.agents/skills'), join(dir, '.claude/skills'), join(dir, 'skills')); const parent = dirname(dir); if (parent === dir) break; dir = parent; } }

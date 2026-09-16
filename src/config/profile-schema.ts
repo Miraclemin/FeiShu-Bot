@@ -1,3 +1,4 @@
+import { isAvatarId } from './avatar';
 import { normalizeWorkbench, type WorkbenchConfig } from './workbench';
 import type {
   AppCredentials,
@@ -145,6 +146,8 @@ export interface LarkCliConfig {
 }
 
 export interface ProfileConfig {
+  displayName?: string;
+  avatarId?: string;
   workbench?: WorkbenchConfig;
   schemaVersion: 2;
   agentKind: AgentKind;
@@ -224,6 +227,8 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
     throw new Error('profile config must be an object');
   }
   const raw = input as {
+    displayName?: unknown;
+    avatarId?: unknown;
     workbench?: unknown;
     schemaVersion?: unknown;
     agentKind?: unknown;
@@ -278,6 +283,8 @@ export function normalizeProfileConfig(input: unknown): ProfileConfig {
   return {
     schemaVersion: 2,
     agentKind: raw.agentKind,
+    ...(isAvatarId(raw.avatarId) ? { avatarId: raw.avatarId } : {}),
+    ...(typeof raw.displayName === "string" && raw.displayName.trim() ? { displayName: raw.displayName.trim() } : {}),
     ...(raw.workbench !== undefined ? { workbench: normalizeWorkbench(raw.workbench) } : {}),
     mode: raw.mode === 'team' ? 'team' : 'personal',
     accounts,
