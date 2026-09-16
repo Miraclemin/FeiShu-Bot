@@ -17,6 +17,8 @@
   <a href="#快速开始">快速开始</a> ·
   <a href="#可以用它做什么">使用场景</a> ·
   <a href="#配置你的工作台">工作台配置</a> ·
+  <a href="#日常使用与飞书命令">飞书命令</a> ·
+  <a href="#电脑终端命令">终端命令</a> ·
   <a href="#常见问题">常见问题</a> ·
   <a href="#项目来源与致谢">来源与致谢</a>
 </p>
@@ -164,37 +166,249 @@ Skill 通常是一份任务指引，告诉 Agent 如何做某类工作。勾选 
 
 你可以在工作台切换本机引擎，继续使用同一个飞书机器人。切换会开始新对话；正在运行任务时需要先等任务结束。不同引擎支持的权限模式和会话机制有所不同，详情见[工作台说明](docs/WORKBENCH.md)。
 
-## 日常使用
+## 日常使用与飞书命令
 
-除自然语言任务外，也可以在飞书里 @ 机器人发送命令。<strong>每条命令单独发送。</strong>
+### 在哪里输入？
 
-| 命令 | 用途 |
-| --- | --- |
-| `/help` 或 `/usage` | 查看帮助与当前群的技能提示 |
-| `/status` | 查看运行状态与项目入口 |
-| `/config` | 查看或调整机器人配置，修改受管理权限约束 |
-| `/project show` | 查看当前群或 Topic 的项目绑定 |
-| `/project help` | 查看项目配置命令 |
-| `/new` | 开始新对话 |
-
-第一次使用建议从读取和分析开始，再给出明确的修改要求。例如：“先解释原因”“只修改这个文件”“完成后运行相关测试”。是否可以执行取决于所选引擎和权限设置。
-
-<details>
-<summary><strong>进阶：通过飞书命令配置项目</strong></summary>
-
-也可以逐条发送：
+下面以 `/` 开头的命令，发送在<strong>飞书与机器人的对话里</strong>，不要输入电脑终端。在群里先通过飞书的 @ 菜单选中机器人，再输入命令；私聊直接输入命令即可。
 
 ```text
-@你的机器人 /project set name 我的产品
-@你的机器人 /project set url https://example.com
-@你的机器人 /project set repo /你的本机项目目录
-@你的机器人 /project set requirements 飞书需求表完整链接
-@你的机器人 /project set bugs 飞书Bug表完整链接
+@你的机器人 /status
 ```
 
-表格链接应包含 `/base/` 及具体的 `table=tbl...` 参数。项目绑定按机器人、群与 Topic 区分；电脑执行权限按机器人保存。更多字段及命令以 `/project help` 为准。
+每条命令单独发送。示例中的 `<路径>`、`<名称>` 等表示需要替换的参数，实际输入时不带尖括号；`[会议号]` 表示可选参数。管理类命令受创建者/管理员规则限制，桌面工作台还会检查创建者身份和群是否启用。
+
+### 会话与任务
+
+| 命令 | 怎么用 |
+| --- | --- |
+| `/help` 或 `/usage` | 查看帮助、可用命令和本群技能提示 |
+| `/status` | 查看当前运行状态、会话和项目入口 |
+| `/new` 或 `/reset` | 中断当前任务并开始新会话，不删除项目文件 |
+| `/stop` | 请求中断当前对话正在执行的任务；不会关闭机器人 |
+| `/resume` | 查看可恢复的会话；群里不展示历史详情，请私聊机器人操作 |
+| `/resume use <候选值>` | 使用 `/resume` 返回的按钮或候选值恢复，不要自行填写其他会话 ID |
+| `/timeout` | 查看当前会话的探活超时设置 |
+| `/timeout 15` | 将当前会话的探活超时设为 15 分钟，支持 1–120 分钟 |
+| `/timeout off` | 关闭当前会话的探活超时 |
+| `/timeout default` | 清除当前会话覆盖，恢复全局配置 |
+
+`/new` 会清除当前会话的超时覆盖。恢复能力随引擎和会话上下文而异；Codex 返回的恢复候选有效期为 10 分钟，需要使用当前上下文生成的候选。
+
+<strong>一个日常使用顺序：</strong>
+
+```text
+@你的机器人 /status
+@你的机器人 请阅读当前项目的 README，概括项目用途，不修改文件。
+@你的机器人 请继续分析登录流程，列出你发现的问题。
+@你的机器人 /stop
+@你的机器人 /new
+```
+
+以上五行是五条独立消息。`/stop` 用在任务执行中需要打断时，`/new` 用在准备换话题时；正常完成任务后不必每次都发送。
+
+### 工作目录与目录别名
+
+| 命令 | 示例与作用 |
+| --- | --- |
+| `/cd <绝对路径>` | `/cd /Users/你的用户名/Projects/demo`，切换当前对话工作目录 |
+| `/cd ~/Projects/demo` | macOS/Linux 可使用 `~` 表示主目录 |
+| `/ws` 或 `/ws list` | 查看保存的工作目录别名 |
+| `/ws save <名称>` | `/ws save demo`，把当前已设置的目录保存为别名 |
+| `/ws use <名称>` | `/ws use demo`，切换到已保存目录 |
+| `/ws remove <名称>` | `/ws remove demo`，删除别名，不删除目录中的文件；也可用 `/ws rm demo` |
+
+桌面用户优先在工作台选择群工作目录。`/cd` 和 `/ws` 是聊天中的目录操作，使用后通过 `/status` 核对实际目录；不要将它们当成操作系统文件隔离。
+
+### 项目与资料绑定
+
+在目标群或 Topic 中逐条发送命令，绑定只影响<strong>当前机器人和当前群/Topic</strong>：
+
+```text
+@你的机器人 /project show
+@你的机器人 /project set name 我的产品
+@你的机器人 /project set url https://example.com
+@你的机器人 /project set repo /Users/你的用户名/Projects/demo
+@你的机器人 /project set requirements 你的飞书需求表完整链接
+@你的机器人 /project set bugs 你的飞书Bug表完整链接
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `name` | 项目或产品名称 |
+| `url` | 产品访问网址 |
+| `repo` | 本机源码目录，不是 GitHub 仓库网址 |
+| `requirements` | 需求表链接 |
+| `bugs` | Bug 表链接 |
+| `records` | 巡检记录表链接 |
+| `directions` | 巡检方向表链接 |
+| `logs` | 探索日志表链接 |
+
+更多示例：`/project set records <完整表格链接>`。表格链接应包含 `/base/` 及具体的 `table=tbl...` 参数；`/project help` 可随时查看说明。
+
+修改绑定需要管理权限；当前有任务运行时先等任务结束或用 `/stop` 中断。保存项目绑定会重置当前对话。`repo` 指定源码位置，`/cd` 切换执行目录，两者不会自动改变执行权限，也不会新建定时任务。该组命令依赖 Python 项目绑定工具，目前使用 Unix 文件锁。
+
+### 配置与故障诊断
+
+| 命令 | 用途与示例 |
+| --- | --- |
+| `/config` | 打开配置卡片，按卡片操作调整模型、权限等设置 |
+| `/account` | 查看当前飞书账号绑定入口 |
+| `/account change` | 进入账号更换流程，受身份和权限规则约束 |
+| `/doctor` | 检查工作目录与 Agent 响应；可能发起一次模型调用 |
+| `/doctor <问题描述>` | 例如 `/doctor 最近请求没有回复`，携带故障描述诊断 |
+| `/reconnect --wait` | 等当前任务结束后重连 |
+| `/reconnect` | 停止当前运行并立即重连 |
+| `/ps` | 查看本机 Bridge 运行进程及短 ID |
+| `/exit <短ID或序号>` | 退出 `/ps` 列出的指定进程；会停止该进程服务 |
+
+<strong>机器人回复异常时：</strong>先 `/status` 查看状态，再 `/doctor` 获取诊断；需要重连时优先 `/reconnect --wait`。如果机器人完全不回复，就在客户端检查是否启动，或使用下文的终端 `status` 命令查看服务状态和日志路径。
+
+<details>
+<summary><strong>会议命令：入会、字幕、纪要与提问</strong></summary>
+
+先在 `/config` 或控制台启用“会议智能体”，完成相应飞书权限配置并重启机器人。会议能力还取决于应用权限、会议准入和字幕来源；机器人入会不等于已经拿到会议字幕。
+
+| 命令 | 用法 |
+| --- | --- |
+| `/meeting` 或 `/meeting status` | 查看正在跟进的会议与状态 |
+| `/meeting join <9位会议号>` | 例如 `/meeting join 123456789`，替换成真实的 9 位纯数字会议号，不是会议链接 |
+| `/meeting transcript [会议号]` | 查看 Agent 实际收到的字幕上下文 |
+| `/meeting notes [会议号]` | 根据已收到的字幕生成纪要，回复到发起命令的对话 |
+| `/meeting ask <问题>` | 例如 `/meeting ask 刚才确认了哪些待办？` |
+| `/meeting stop [会议号]` | 中断该会议正在运行的 Agent 任务，不等于离会 |
+| `/meeting leave [会议号]` | 让机器人离开会议 |
+
+同时跟进多场会议时，`notes`、`transcript`、`stop` 和 `leave` 应带会议号。`ask` 不接受前置会议号来选择会议，多场会议时按机器人提示处理。想单独收到纪要，应在私聊中发起命令。
+
+建议顺序：`join` → `status` → `transcript` 确认有内容 → `notes` 或 `ask` → `leave`。具体能力说明见[会议说明](docs/MEETING-LISTENING.md)。
 
 </details>
+
+<details>
+<summary><strong>进阶：群、访问名单与指定任务管理</strong></summary>
+
+以下是 Bridge 保留的管理命令。修改名单不会绕过桌面工作台的创建者限制，也不会自动完成新群的工作台配置。
+
+| 命令 | 作用 |
+| --- | --- |
+| `/new chat <群名称>` | 创建新群并继承原对话目录；需要建群权限，工作台模式下还需配置并启用新群 |
+| `/invite user @某人` | 将被 @ 的人加入允许私聊名单 |
+| `/invite admin @某人` | 将被 @ 的人加入管理员名单 |
+| `/invite group` | 在目标群发送，将当前群加入响应名单 |
+| `/invite all group` | 将机器人所在的群批量加入响应名单 |
+| `/remove user @某人` | 从用户允许名单中移除 |
+| `/remove admin @某人` | 从管理员名单中移除 |
+| `/remove group` | 在目标群发送，从响应名单中移除当前群 |
+| `/stop <scope>` | 管理员中断指定作用域中的任务，使用状态信息提供的 scope |
+| `/timeout comment:<scopeHash> 15` | 管理员为指定文档评论作用域设置探活超时 |
+| `/doc` | 查看文档评论触发方式的提示；不是读取任意文档的命令 |
+
+`@某人` 应使用飞书真实的 @ 选择，不是手打一个名字。名单移除不等于把成员踢出飞书群。会议、群管理和评论功能均需要对应平台权限。
+
+</details>
+
+## 电脑终端命令
+
+这一节在<strong>电脑终端</strong>操作，不发送到飞书。只使用桌面 App 的用户可以通过界面完成日常配置，不必安装全局命令。
+
+### 如何运行 CLI
+
+从源码安装依赖并执行 `pnpm build` 后，在仓库目录运行：
+
+```bash
+node bin/lark-channel-bridge.mjs --help
+node bin/lark-channel-bridge.mjs --version
+```
+
+下文统一使用 `node bin/lark-channel-bridge.mjs`，无需全局安装，也不会混用其他版本的 Bridge。若已经从本仓库构建并全局安装包，可替换为 `feishu-collaborator` 或兼容别名 `lark-channel-bridge`。当前不提供从 npm 安装本项目的指令。
+
+`profile` 表示一套机器人配置。下面的 `my-bot` 是示例名称，可以换成自己的名称。CLI 默认使用 `~/.lark-channel`，与桌面默认的 `~/.lark-workbench` 分开；刚安装 CLI 时看不到桌面 Agent 属于正常情况，不要同时启动同一套机器人凭据。
+
+### 第一次创建并启动
+
+```bash
+# 创建配置，选择 Codex 和自己的项目目录；跟随交互完成飞书连接
+node bin/lark-channel-bridge.mjs profile create my-bot --agent codex --workspace "/你的项目绝对路径"
+
+# 查看配置列表，并设为默认配置
+node bin/lark-channel-bridge.mjs profile list
+node bin/lark-channel-bridge.mjs profile use my-bot
+
+# 前台运行：终端保持打开，按 Ctrl+C 结束
+node bin/lark-channel-bridge.mjs run --profile my-bot
+```
+
+命令行创建时 `--agent` 支持 `claude` 或 `codex`。其他引擎通过桌面工作台配置。已有飞书应用可在创建时指定 `--app-id <AppID>`，App Secret 按交互提示输入，不建议直接写进终端历史。
+
+### 前台运行与网页控制台
+
+| 命令（接在 `node bin/lark-channel-bridge.mjs` 后） | 作用 |
+| --- | --- |
+| `run --profile my-bot` | 前台运行一个机器人 |
+| `run --web-ui` | 前台启动统一管理服务与本地网页控制台，可管理多个 profile |
+| `ui` | 打开本地控制台 |
+| `ui --print` | 打印控制台地址，不自动打开浏览器 |
+| `ps` | 列出本机运行中的 Bridge 进程 |
+| `kill <短ID或序号>` | 停止 `ps` 中指定进程；系统管理的服务可能再次拉起它 |
+
+### 后台服务：启动、停止与日志
+
+后台服务由操作系统管理：macOS 使用 launchd，Linux 使用 systemd，Windows 使用计划任务；是否能够注册和启动取决于本机环境。
+
+```bash
+# 安装并启动后台服务
+node bin/lark-channel-bridge.mjs start --profile my-bot
+
+# 查看进程、最近退出状态和日志文件路径
+node bin/lark-channel-bridge.mjs status --profile my-bot
+
+# 重启服务
+node bin/lark-channel-bridge.mjs restart --profile my-bot
+
+# 停止服务并禁用自启动，保留服务定义
+node bin/lark-channel-bridge.mjs stop --profile my-bot
+
+# 移除系统服务注册，不用于删除项目源码
+node bin/lark-channel-bridge.mjs unregister --profile my-bot
+```
+
+需要后台运行统一网页控制台时使用 `start --web-ui`，对应管理命令为 `status --web-ui`、`restart --web-ui`、`stop --web-ui` 和 `unregister --web-ui`。
+
+<strong>三个“停止”的区别：</strong>飞书 `/stop` 中断当前任务；终端 `stop` 停止系统后台服务；终端 `kill` 停止指定进程。前台 `run` 用 Ctrl+C 退出。
+
+<details>
+<summary><strong>进阶：配置导出、归档、迁移与密钥管理</strong></summary>
+
+以下命令仍接在 `node bin/lark-channel-bridge.mjs` 后执行：
+
+| 命令 | 作用 |
+| --- | --- |
+| `profile export my-bot --output ./my-bot.json` | 导出配置；默认不包含密钥，仍可能含本机路径等私人信息 |
+| `profile export my-bot --output ./my-bot.json --force` | 覆盖已有导出文件 |
+| `profile remove my-bot` | 归档机器人配置及本地状态 |
+| `profile remove my-bot --purge --yes` | 永久删除该配置状态，操作前自行备份 |
+| `migrate --config /旧配置绝对路径 --profile my-bot --agent codex` | 将旧版配置迁移到 profile 布局；仅旧配置迁移时需要 |
+| `secrets set --app-id cli_xxx --profile my-bot` | 交互输入并加密保存 App Secret |
+| `secrets list --profile my-bot` | 列出已保存的密钥 ID，不展示密钥内容 |
+| `secrets remove --app-id cli_xxx --profile my-bot` | 删除指定密钥条目，依赖它的机器人可能无法连接 |
+
+导出支持 `--include-secrets --yes`，会包含敏感凭据，不应用于给别人分享客户端。`secrets get` 是供工具调用的 JSON 标准输入/输出协议接口，通常不需要手动使用。
+
+</details>
+
+### 随时查看完整参数
+
+```bash
+node bin/lark-channel-bridge.mjs --help
+node bin/lark-channel-bridge.mjs run --help
+node bin/lark-channel-bridge.mjs profile create --help
+node bin/lark-channel-bridge.mjs profile export --help
+node bin/lark-channel-bridge.mjs start --help
+node bin/lark-channel-bridge.mjs secrets --help
+```
+
+`--profile <名称>` 用于指定机器人；`run --config <路径>` 用于指定配置文件；`--tenant feishu` / `--tenant lark` 用于创建或首次配置时选择平台。以当前版本的 `--help` 输出为准。
 
 ## 常见问题
 
