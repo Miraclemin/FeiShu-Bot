@@ -45,6 +45,14 @@ describe('writeNewProfile (new-profile is additive)', () => {
     expect(Object.keys(root2.profiles).sort()).toEqual(['claude', 'work']);
   });
 
+  it('rejects binding the same app under another name', async () => {
+    const root = await tmpRoot();
+    const input = {profile:'first',agentKind:'claude' as const,appId:'cli_same',appSecret:'secret',tenant:'feishu' as const};
+    await writeNewProfile(input, root);
+    await expect(writeNewProfile({...input,profile:'second'},root)).rejects.toThrow(/已绑定/);
+    expect(Object.keys((await loadRootConfig(join(root,'config.json')))!.profiles)).toEqual(['first']);
+  });
+
   it('creates a profile with a Unicode (Chinese) name from the scanned bot name', async () => {
     const root = await tmpRoot();
 

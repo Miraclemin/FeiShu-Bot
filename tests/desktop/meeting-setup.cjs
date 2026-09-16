@@ -1,0 +1,60 @@
+const { app, BrowserWindow } = require('electron');
+const assert = require('node:assert/strict');
+const { permissionPageStep, validatePermissionImport, replacePermissionImport } = require('../../desktop/permission-setup.cjs');
+const { pageStep, targetUrl, EVENTS } = require('../../desktop/meeting-setup.cjs');
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true } });
+  let checks = 0;
+  const check = (actual, expected) => { assert.deepEqual(actual, expected); checks++; };
+  const origin = 'https://open.feishu.cn';
+  // Use a local HTTP fixture so location gating is exercised without accessing Feishu.
+  const server = require('node:http').createServer((_req, res) => res.end('<html><body></body></html>'));
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}/app/cli_test/event?tab=event`;
+  await win.loadURL(url);
+  const html = async content => win.webContents.executeJavaScript(`document.body.innerHTML=${JSON.stringify(content)}`);
+  const step = action => win.webContents.executeJavaScript(`(${pageStep.toString()})(${JSON.stringify(url)},${JSON.stringify(EVENTS)},${JSON.stringify(action)})`);
+  try {
+    check(targetUrl('cli_test','feishu'), `${origin}/app/cli_test/event?tab=event`);
+    assert.throws(()=>targetUrl('../wrong','feishu')); checks++;
+    check((await win.webContents.executeJavaScript(`(${pageStep.toString()})('https://wrong.example/app/cli_test/event',${JSON.stringify(EVENTS)},'submit')`)).state,'login');
+    await html('<button>添加事件</button>'); check((await step('inspect')).state,'loading');
+    await html('<p>使用 请求地址 接收事件</p><button>添加事件</button>'); check((await step('inspect')).state,'connection');
+    await html('<p>使用 长连接 接收事件</p><button>添加事件</button>'); check((await step('inspect')).state,'open');
+    const rows = EVENTS.map(k=>`<div><label><input type="checkbox"></label><span>${k}</span></div>`).join('');
+    await html(`<input placeholder="搜索" value="vc.bot">${rows}<button>添加</button>`);
+    check((await step('inspect')).state,'select');
+    check((await step('select')).state,'review');
+    check((await step('inspect')).selected,EVENTS);
+    await win.webContents.executeJavaScript(`document.querySelector('button').onclick=()=>{document.body.dataset.submitted='true'};void 0`);
+    await step('submit'); check(await win.webContents.executeJavaScript('document.body.dataset.submitted'),'true');
+    await html(`<input placeholder="搜索" value="vc.bot">${rows}<div><input type="checkbox" checked>unexpected</div><button>添加</button>`);
+    check((await step('select')).state,'unexpected');
+    await html('<input placeholder="搜索" value="vc.bot"><button>添加</button>'); check((await step('inspect')).state,'unavailable');
+    await html('<p>使用 <span>长</span>\n<span>连接</span> 接收事件 当前修改均已发布</p><button>添加事件</button><table>'+EVENTS.map(k=>`<tr><td>${k}</td><td>已开通</td></tr>`).join('')+'</table>');
+    const result = await step('inspect'); check(result.state,'configured'); check(result.published,true); check(result.missingScope,false);
+    await win.webContents.executeJavaScript(`document.querySelector('td:last-child').textContent='请开通以下权限'`);
+    check((await step('inspect')).missingScope,true);
+    await html('<button>下一步，确认新增权限</button><textarea class="inputarea"></textarea><textarea class="inputarea" style="display:none"></textarea>');
+    check(await win.webContents.executeJavaScript(`(${permissionPageStep.toString()})(${JSON.stringify(url)})`),'editor');
+    check(await win.webContents.executeJavaScript(`document.activeElement.tagName`),'TEXTAREA');
+    check(await win.webContents.executeJavaScript(`(${permissionPageStep.toString()})('https://wrong.example')`),'login');
+    const config = JSON.stringify({scopes:{tenant:['im:message'],user:[]}},null,2);
+    check(validatePermissionImport(config,config),true);
+    check(validatePermissionImport(config+'}',config),false);
+    check(validatePermissionImport(config+config,config),false);
+    check(validatePermissionImport('{"tenant":[]}',config),false);
+    check(validatePermissionImport('{"scopes":{"tenant":[],"user":[]}}',config),false);
+    check(validatePermissionImport('{"scopes":{"tenant":["im:message","im:message"],"user":[]}}',config),false);
+    check(validatePermissionImport('',config),false);
+    // Exercise real native select/paste/copy against an editor containing leftover braces.
+    win.show(); win.focus();
+    await html('<textarea class="inputarea" style="width:400px;height:300px">{}}}</textarea>');
+    await win.webContents.executeJavaScript('document.querySelector("textarea").focus()');
+    check(await replacePermissionImport(win.webContents,config),true);
+    check(await win.webContents.executeJavaScript('document.querySelector("textarea").value'),config);
+    check(await replacePermissionImport(win.webContents,config),true);
+    check(await win.webContents.executeJavaScript('document.querySelector("textarea").value'),config);
+    console.log(`PASS ${checks} meeting setup browser checks`);
+  } finally { win.destroy(); server.close(); }
+}).then(()=>app.exit(0)).catch(e=>{console.error(e);app.exit(1)});

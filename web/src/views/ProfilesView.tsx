@@ -1,6 +1,6 @@
 import { AgentAvatar } from '@/components/AgentAvatar';
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import type { ProfileInfo } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [stopTarget, setStopTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProfileInfo | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -64,6 +66,21 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
     }
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await apiPost('/api/profiles/delete', { profile: deleteTarget.name });
+      toast.success(`已删除 ${deleteTarget.displayName || deleteTarget.name}`);
+      setDeleteTarget(null);
+      await load();
+    } catch (e) {
+      toast.error(String((e as Error).message ?? e));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -89,7 +106,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
               <div className="flex items-center gap-2">
                 <span className="font-medium break-all">{p.displayName || p.name}</span>
                 <Badge variant="secondary">{p.agentKind}</Badge>
-                {p.running ? <Badge variant="success">在线</Badge> : <Badge variant="outline">未运行</Badge>}
+                {p.running ? <Badge variant="success">在线</Badge> : <Badge variant="outline">{p.needsSetup ? "待配置" : "未运行"}</Badge>}
               </div>
             </div>
             </button>
@@ -106,10 +123,29 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
                 {busy === p.name ? "启动中…" : "启动"}
               </Button>
             )}
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" disabled={busy === p.name || deleting}
+              aria-label={`删除 ${p.displayName || p.name}`} onClick={() => setDeleteTarget(p)}>
+              <Trash2 className="h-4 w-4" />删除
+            </Button>
             <ChevronRight className="text-muted-foreground" />
           </div>
         ))}
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>删除 {deleteTarget?.displayName || deleteTarget?.name}？</DialogTitle>
+            <DialogDescription>
+              将停止这个 Agent 并移除本机绑定。飞书应用、群聊和项目文件会保留，之后可重新绑定。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>取消</Button>
+            <Button variant="destructive" disabled={deleting} onClick={confirmDelete}>{deleting ? '删除中…' : '确认删除'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent>

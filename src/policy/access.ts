@@ -35,7 +35,10 @@ export function canUseDm(
   controls: RuntimeControls,
   senderId: string,
 ): AccessDecision {
-  if (profile.workbench && (!isCreator(controls, senderId) || controls.ownerRefreshState !== 'ok')) return deny('denied-user');
+  if (profile.workbench) {
+    if (!senderId) return deny('denied-user');
+    return isCreator(controls, senderId) ? allow('owner') : allow('allowed-team');
+  }
   if (isCreator(controls, senderId)) return allow('owner');
   // Team mode opens up *usage* to everyone — no allowlist gating. Admin
   // commands stay owner/admin-gated via canRunAdminCommand (unchanged).
@@ -53,7 +56,8 @@ export function canUseGroup(
 ): AccessDecision {
   if (profile.workbench) {
     if (!profile.workbench.groups[chatId]?.enabled) return deny('denied-chat');
-    if (!isCreator(controls, senderId) || controls.ownerRefreshState !== 'ok') return deny('denied-user');
+    if (!senderId) return deny('denied-user');
+    return isCreator(controls, senderId) ? allow('owner') : allow('allowed-team');
   }
   if (isCreator(controls, senderId)) return allow('owner');
   if (profile.mode === 'team') return allow('allowed-team');
@@ -82,7 +86,7 @@ export function canRunAdminCommand(
   senderId: string,
 ): AccessDecision {
   if (isCreator(controls, senderId)) return allow('owner');
-  if (profile.access.admins.includes(senderId)) return allow('allowed-admin');
+  if (!profile.workbench && profile.access.admins.includes(senderId)) return allow('allowed-admin');
   return deny('denied-admin');
 }
 

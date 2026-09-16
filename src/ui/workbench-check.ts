@@ -18,7 +18,7 @@ export async function checkWorkbench(profile: string, body: any, rootDir?: strin
  if (!group) throw new Error('请先选择群');
  const checks: {label:string;ok:boolean;message:string}[]=[];
  const add=(label:string,ok:boolean,message:string)=>checks.push({label,ok,message});
- add('工作角色',!!group.role,group.role ? '已选择' : '请选择产品经理、研发或巡检');
+ add('工作角色',!!group.role,group.role ? '已选择' : '请选择或填写工作角色');
  add('项目名称',!!group.project?.name,group.project?.name || '请填写项目名称');
  add('工作目录',!!group.workspace && existsSync(group.workspace) && statSync(group.workspace).isDirectory(),'目录需要存在于运行机器人的这台电脑');
  try { const skills=selectedSkills({ids:group.skills ?? []},discoverSkills(group.workspace));add('技能文件',skills.length>0,skills.length ? `${skills.length} 个已选技能可读取` : '未启用技能'); } catch(e) {add('技能文件',false,(e as Error).message);}

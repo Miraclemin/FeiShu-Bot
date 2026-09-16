@@ -19,3 +19,12 @@ it('allows multiple documents and rejects hostile hosts',()=>{
  expect(normalizeWorkbench({groups:{oc_demo:{resources}}})?.groups.oc_demo?.resources).toEqual(resources);
  expect(()=>normalizeWorkbench({groups:{oc_demo:{resources:['https://feishu.cn.evil.test/docx/a']}}})).toThrow();
 });
+it('preserves custom roles and instructions through repeated save normalization', () => {
+ const input = {groups:{oc_demo:{role:'自媒体选题策划',rolePrompt:'根据选题库提供三个选题及推荐理由',skills:[]}}};
+ const saved=normalizeWorkbench(input)!;
+ const loaded=normalizeWorkbench(JSON.parse(JSON.stringify(saved)))!;
+ expect(loaded.groups.oc_demo?.role).toBe('自媒体选题策划');
+ expect(loaded.groups.oc_demo?.rolePrompt).toBe(input.groups.oc_demo.rolePrompt);
+ expect(loaded.groups.oc_demo?.skills).toEqual([]);
+ expect(()=>normalizeWorkbench({groups:{oc_demo:{role:'a'.repeat(81)}}})).toThrow('角色名称');
+});

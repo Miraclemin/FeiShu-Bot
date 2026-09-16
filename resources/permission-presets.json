@@ -17,7 +17,7 @@
   {
     "id": "chat-history",
     "label": "读取群历史并总结（包含未 @ 机器人的消息）",
-    "default": false,
+    "default": true,
     "tenant": [
       "im:message:readonly",
       "im:message.group_msg"
@@ -53,7 +53,9 @@
     "tenant": [
       "base:table:read",
       "base:field:read",
+      "base:record:read",
       "base:record:retrieve",
+      "base:record:read",
       "base:view:read"
     ],
     "user": []
@@ -61,7 +63,7 @@
   {
     "id": "table-write",
     "label": "新增或修改表格记录（不包含删除）",
-    "default": false,
+    "default": true,
     "tenant": [
       "base:record:create",
       "base:record:update"
@@ -71,7 +73,7 @@
   {
     "id": "document-write",
     "label": "创建或编辑文档",
-    "default": false,
+    "default": true,
     "tenant": [
       "docx:document:create",
       "docx:document:write_only"

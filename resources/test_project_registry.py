@@ -26,6 +26,21 @@ class RegistryTest(unittest.TestCase):
    with patch.object(Path,'open',readonly),patch.object(Path,'mkdir',side_effect=PermissionError('no mkdir')):
     self.assertEqual(run('codex','oc_a','','show',path=p)['product_name'],'A')
     self.assertFalse(run('codex','oc_a','','show',path=Path(d)/'missing'/'b.json')['configured'])
+ def test_desktop_binding_without_name_or_repo(self):
+  import json
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/'project-bindings.json'
+   config={'profiles':{'Agent-test':{'workbench':{'groups':{'oc_a':{'enabled':True,'project':{},'resources':['https://example.com/table']},'oc_disabled':{'enabled':False}}}}}}
+   (Path(d)/'config.json').write_text(json.dumps(config))
+   result=run('Agent-test','oc_a','omt_1','show',path=p)
+   self.assertTrue(result['configured'])
+   self.assertEqual(result['source'],'desktop-workbench')
+   self.assertEqual(result['resources'],['https://example.com/table'])
+   self.assertEqual(result['missing'],[])
+   self.assertFalse(run('Agent-test','oc_other','','show',path=p)['configured'])
+   self.assertFalse(run('Agent-test','oc_disabled','','show',path=p)['configured'])
+   with self.assertRaises(ValueError):run('Agent-test','oc_a','','set','name','B',p)
+   self.assertFalse(p.exists())
  def test_invalid(self):
   for f,v in [('url','https://a.com/?token=secret'),('repo','/'),('bugs','https://a.com/base/abc?table=tblx')]:
    with self.assertRaises(ValueError):validate(f,v)

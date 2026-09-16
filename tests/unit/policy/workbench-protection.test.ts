@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canUseDm, canUseGroup } from '../../../src/policy/access';
+import { canUseDm, canUseGroup, canRunAdminCommand } from '../../../src/policy/access';
 import { createDefaultProfileConfig } from '../../../src/config/profile-schema';
 import { normalizeWorkbench } from '../../../src/config/workbench';
 import { evaluateRunPolicy } from '../../../src/policy/run-policy';
@@ -12,14 +12,23 @@ function profile() {
   return cfg;
 }
 describe('native CLI document protection', () => {
-  it.each(['ou_external', 'ou_user', 'ou_admin'])('does not let %s inherit bot document access, even in team mode', actor => {
-    expect(canUseGroup(profile(), owner, 'oc_team', actor).ok).toBe(false);
-    expect(canUseDm(profile(), owner, actor).ok).toBe(false);
+  it.each(['ou_external', 'ou_user', 'ou_admin'])('lets %s use the configured bot without granting management', actor => {
+    expect(canUseGroup(profile(), owner, 'oc_team', actor).ok).toBe(true);
+    expect(canUseDm(profile(), owner, actor).ok).toBe(true);
+    expect(canRunAdminCommand(profile(), owner, actor).ok).toBe(false);
   });
-  it('requires current verified ownership and an explicitly enabled group', () => {
+  it('requires an explicitly enabled group but not owner identity for usage', () => {
     expect(canUseGroup(profile(), owner, 'oc_team', 'ou_owner').ok).toBe(true);
     expect(canUseGroup(profile(), owner, 'oc_other', 'ou_owner').ok).toBe(false);
-    expect(canUseGroup(profile(), { ...owner, ownerRefreshState: 'failed' }, 'oc_team', 'ou_owner').ok).toBe(false);
+    expect(canUseGroup(profile(), { ...owner, ownerRefreshState: 'failed' }, 'oc_team', 'ou_owner').ok).toBe(true);
+  });
+  it('allows member runs but preserves denied access decisions', () => {
+    const cfg = profile();
+    const input = { scope: { source: 'im' as const, actorId: 'ou_member', chatId: 'oc_team' }, attachments: [], prompt: 'summarize', requestedCwd: '/workspace', cwdRealpath: '/workspace', access: canUseGroup(cfg, owner, 'oc_team', 'ou_member'), capability: capabilityFor(cfg), profileConfig: cfg, now: 0 };
+    expect(evaluateRunPolicy(input).ok).toBe(true);
+    expect(evaluateRunPolicy({ ...input, access: { ok: false, reason: 'denied-chat' } }).ok).toBe(false);
+    expect(canRunAdminCommand(cfg, owner, 'ou_owner').ok).toBe(true);
+    expect(canUseGroup(cfg, owner, 'oc_other', 'ou_member').ok).toBe(false);
   });
   it('fails closed for strict document bindings rather than relying on prompts', () => {
     const cfg = profile(); cfg.workbench!.groups.oc_team!.documents = ['https://example.feishu.cn/docx/abc'];

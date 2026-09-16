@@ -50,6 +50,25 @@ def run(profile,chat,topic,action,field=None,value=None,path=FILE,cwd=None):
  if topic and not re.fullmatch(r'(?:om_|omt_)[A-Za-z0-9]+',topic):raise ValueError('Topic ID无效')
  path=Path(path)
  if action not in ['show','set']:raise ValueError('仅支持show/set')
+ # Desktop workbench is authoritative for this profile; never fall back to a
+ # legacy binding from another configuration system for a missing/disabled group.
+ config_file=path.parent/'config.json'
+ try: desktop=json.loads(config_file.read_text()).get('profiles',{}).get(profile,{})
+ except FileNotFoundError: desktop={}
+ if 'workbench' in desktop:
+  if action!='show':raise ValueError('请在软件中编辑当前群绑定')
+  group=desktop.get('workbench',{}).get('groups',{}).get(chat)
+  enabled=bool(group and group.get('enabled'))
+  group=group or {}
+  project=group.get('project') or {}
+  return {'profile':profile,'chat_id':chat,'topic_id':topic or None,
+   'source':'desktop-workbench','configured':enabled,'role':group.get('role'),
+   'product_name':project.get('name',''),'product_url':project.get('url',''),
+   'project_workspace':group.get('workspace',''),'workspace':group.get('workspace',''),
+   'bugs_url':project.get('bugs',''),'requirements_url':project.get('requirements',''),
+   'resources':group.get('resources',[]) if enabled else [],
+   'missing':[] if enabled else ['enabled_group'],
+   'note':'当前群绑定来自软件。只读资料查询不要求项目名称或源码仓库；先读取资源元信息识别表名，再按实际权限读取。代码任务另行检查源码目录。'}
  def read():
   try:return json.loads(path.read_text())
   except FileNotFoundError:return {}

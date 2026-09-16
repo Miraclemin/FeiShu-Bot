@@ -1,3 +1,4 @@
+import { runProfileRemove } from '../cli/commands/profile';
 import { defaultAvatarId, isAvatarId } from '../config/avatar';
 import { resolveAppPaths } from '../config/app-paths';
 import {
@@ -12,6 +13,7 @@ import { HttpError } from './http';
 import type { UiSupervisor } from './types';
 
 export interface ProfileSummary {
+  needsSetup?: boolean;
   avatarId?: string;
   displayName?: string;
   name: string;
@@ -54,7 +56,9 @@ export async function listProfiles(
   rootDir?: string,
 ): Promise<ProfileSummary[]> {
   const profiles = await listAllProfiles(rootDir).catch(() => []);
+  const root = await loadRootConfig(resolveAppPaths({rootDir}).configFile);
   return profiles.map((p) => ({
+    needsSetup: !!root?.profiles[p.name]?.workbench && !Object.keys(root?.profiles[p.name]?.workbench?.groups ?? {}).length,
     name: p.name,
     avatarId: p.avatarId ?? defaultAvatarId(p.name),
     ...(p.displayName ? { displayName: p.displayName } : {}),
@@ -107,4 +111,18 @@ export async function setProfileAvatar(profile: string, avatarId: unknown, rootD
     await saveRootConfig(root, configFile);
   });
   return { ok: true, avatarId };
+}
+
+/** Remove only the local binding, preserving archived state and external resources. */
+export async function deleteProfile(supervisor: UiSupervisor, profile: unknown, rootDir?: string) {
+  if (typeof profile !== 'string' || !profile) throw new HttpError(400, '请选择 Agent');
+  const root = await loadRootConfig(resolveAppPaths({ rootDir }).configFile);
+  if (!root?.profiles[profile]) throw new HttpError(404, 'Agent 不存在');
+  await supervisor.stopProfile(profile);
+  try {
+    await runProfileRemove(profile, { rootDir });
+  } catch (err) {
+    throw new HttpError(409, err instanceof Error ? err.message : String(err));
+  }
+  return { ok: true };
 }

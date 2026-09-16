@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
 const { join, delimiter } = require('node:path');
 const { homedir } = require('node:os');
-const { readdirSync } = require('node:fs');
+const { readdirSync, readFileSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
 let host, window, quitting = false;
 function augmentPath() {
@@ -46,6 +46,43 @@ else {
       const selected = presets.filter(p => ids.includes(p.id));
       clipboard.writeText(JSON.stringify({ scopes: { tenant: [...new Set(selected.flatMap(p => p.tenant))], user: [...new Set(selected.flatMap(p => p.user))] } }, null, 2));
       return true;
+    });
+    ipcMain.handle('workbench:permission-setup', async (event, profile) => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
+      const config = JSON.parse(readFileSync(join(process.env.LARK_CHANNEL_HOME, 'config.json'), 'utf8'));
+      if (typeof profile !== 'string' || !Object.hasOwn(config.profiles || {}, profile)) throw new Error('Unknown profile');
+      const account = config.profiles[profile].accounts?.app;
+      return require('./permission-setup.cjs').openPermissionSetup(window, account.id, account.tenant);
+    });
+    ipcMain.handle('workbench:meeting-setup', async (event, profile) => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
+      if (typeof profile !== 'string') throw new Error('Invalid profile');
+      const config = JSON.parse(readFileSync(join(process.env.LARK_CHANNEL_HOME, 'config.json'), 'utf8'));
+      if (!Object.hasOwn(config.profiles || {}, profile)) throw new Error('Unknown profile');
+      const bot = config.profiles[profile];
+      const account = bot.accounts?.app;
+      if (!account?.id) throw new Error('机器人未配置应用 ID');
+      const persistVerified = async (result) => {
+        const fs = require('node:fs/promises');
+        const dir = join(process.env.LARK_CHANNEL_HOME, 'meeting-setup-status');
+        await fs.mkdir(dir, { recursive: true });
+        const file = join(dir, `${account.id}-${account.tenant || 'feishu'}.json`);
+        const tmp = `${file}.tmp`;
+        await fs.writeFile(tmp, JSON.stringify({ ...result, appId: account.id, checkedAt: new Date().toISOString() }), { mode: 0o600 });
+        await fs.rename(tmp, file);
+      }
+      return require('./meeting-setup.cjs').openMeetingSetup(window, account.id, account.tenant, profile, persistVerified);
+    });
+    ipcMain.handle('workbench:meeting-setup-status', async (event, profile) => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
+      const config = JSON.parse(readFileSync(join(process.env.LARK_CHANNEL_HOME, 'config.json'), 'utf8'));
+      if (typeof profile !== 'string' || !Object.hasOwn(config.profiles || {}, profile)) throw new Error('Unknown profile');
+      const account = config.profiles[profile].accounts?.app;
+      if (!account || !/^cli_[a-zA-Z0-9]+$/.test(account.id)) return null;
+      try {
+        const result = JSON.parse(await require('node:fs/promises').readFile(join(process.env.LARK_CHANNEL_HOME, 'meeting-setup-status', `${account.id}-${account.tenant || 'feishu'}.json`), 'utf8'));
+        return result.appId === account.id ? result : null;
+      } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
     });
     ipcMain.handle('workbench:choose-directory', async (event) => {
       if (event.sender !== window.webContents || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');

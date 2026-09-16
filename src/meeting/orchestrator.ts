@@ -114,6 +114,7 @@ export function attachMeetingAgent(deps: MeetingAgentDeps): void {
     // Asked from inside the meeting → answer where the conversation is.
     void answerInMeeting(deps, question, {
       deliver: 'broadcast',
+      actorId: chat.from.id,
       ...(usedPrefix ? { usedPrefix } : {}),
       ...(chat.from.name ? { askedBy: chat.from.name } : {}),
     }).catch((err) =>
@@ -123,6 +124,8 @@ export function attachMeetingAgent(deps: MeetingAgentDeps): void {
 }
 
 export interface AnswerOptions {
+  /** Actual authenticated sender; never substitute the bot owner. */
+  actorId?: string;
   /** Name of the participant who asked (in-meeting triggers only). */
   askedBy?: string;
   /**
@@ -157,7 +160,7 @@ export async function answerInMeeting(
     ...(opts.askedBy ? { askedBy: opts.askedBy } : {}),
   });
 
-  const answer = await runMeetingAgent(deps, prompt, opts.usedPrefix);
+  const answer = await runMeetingAgent(deps, prompt, opts.usedPrefix, opts.actorId);
   if (!answer) return '';
   // The caller relays it themselves; never echo into the meeting.
   if (opts.deliver === 'caller') return answer;
@@ -292,9 +295,12 @@ async function runMeetingAgent(
   deps: MeetingAgentDeps,
   prompt: string,
   usedPrefix?: string,
+  actorId?: string,
 ): Promise<string> {
   const { session, controls } = deps;
   const scopeId = meetingScopeId(session.meetingId);
+  // Authenticated meeting events are available to all meeting participants.
+  const access = { ok: true, reason: 'allowed-chat' as const };
   const capability =
     controls.profileConfig.agentKind === 'codex'
       ? codexCapability(controls.profileConfig)
@@ -303,14 +309,13 @@ async function runMeetingAgent(
     scopeId,
     scope: {
       source: 'meeting',
-      actorId: controls.botOwnerId ?? 'meeting',
+      actorId: actorId ?? 'meeting',
       ...(session.originChatId ? { chatId: session.originChatId } : {}),
     },
     prompt,
     attachments: [],
-    // Meeting content is already gated by "the bot was invited into the
-    // meeting"; the per-chat allowlist doesn't apply here.
-    access: { ok: true, reason: 'allowed-chat' },
+    // Workbench requests retain the authenticated caller decision.
+    access,
     capability,
     profileConfig: controls.profileConfig,
     sessions: deps.sessions,
@@ -347,13 +352,18 @@ async function runMeetingAgent(
 
   let answer = '';
   for await (const event of result.execution.subscribe()) {
+    if (event.type === 'final_text') {
+      answer = event.content;
+      continue;
+    }
     const chunk = textOf(event);
     if (chunk) answer += chunk;
     if (event.type === 'error') {
-      log.warn('meeting', 'run-error', { meetingId: session.meetingId });
+      log.warn('meeting', 'run-error', { meetingId: session.meetingId, message: event.message });
+      return `执行失败：${event.message}`;
     }
   }
-  return answer.trim();
+  return answer.trim() || '本次模型执行结束，但没有返回文字答案。请稍后重试。';
 }
 
 /** Collect assistant text from the agent event stream. */

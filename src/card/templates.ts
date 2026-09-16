@@ -64,6 +64,7 @@ export function workspacesCard(current: string | undefined, named: Record<string
 export interface StatusInfo {
   profileName: string;
   projectBinding?: string;
+  workbenchInfo?: string;
   cwd?: string;
   sessionId?: string;
   emptySessionText?: string;
@@ -122,6 +123,7 @@ export function statusCard(info: StatusInfo): object {
     `👤 **owner API**: ${escapeMd(info.ownerState)}`,
   ];
   return shell('📊 当前状态', [
+    ...(info.workbenchInfo ? [divMd(info.workbenchInfo), HR] : []),
     divMd(lines.join('\n')),
     ...(info.projectBinding ? [HR, divMd(info.projectBinding)] : []),
     HR,
@@ -179,9 +181,10 @@ export function resumeCard(cwd: string, entries: ResumeEntry[]): object {
   return shell('🔁 恢复历史会话', elements);
 }
 
-export function helpCard(agentName = 'Agent', groupSkills?: string): object {
+export function helpCard(agentName = 'Agent', groupSkills?: string, workbenchInfo?: string): object {
   const escapedAgentName = escapeMd(agentName);
   return shell('💡 使用帮助', [
+    ...(workbenchInfo ? [divMd(workbenchInfo), HR] : []),
     ...(groupSkills !== undefined ? [divMd('**本群配置的 Skills**\n' + escapeMd(groupSkills) + '\n\n此清单是加载提示，不代表本次任务已使用这些技能，也不是严格隔离或权限白名单。'), HR] : []),
     divMd(
       [
@@ -194,7 +197,7 @@ export function helpCard(agentName = 'Agent', groupSkills?: string): object {
         '- `/ws list|save <name>|use <name>|remove <name>` — 工作目录',
         '- `/account` — 查看当前应用；`/account change` 换 appId/secret 并重连',
         '- `/config` — 调整偏好、访问控制和 lark-cli 身份策略',
-        '- `/status` — 当前状态',
+        '- `/status [页码]` — 当前状态、本群 Skills、角色与资料清单',
         '- `/stop` — 结束当前正在跑的任务（也可点卡片底部 ⏹ 终止 按钮）',
         '- `/stop comment:<scopeHash>` — 管理员停止云文档评论任务',
         '- `/timeout [N|off|default]` — 当前 session 的探活分钟数,`/config` 改全局默认',
@@ -203,7 +206,7 @@ export function helpCard(agentName = 'Agent', groupSkills?: string): object {
         '- `/exit <id|#>` — 关掉指定 bot(用 `/ps` 看 id/序号)',
         '- `/reconnect` — 强制重连 WebSocket(网络抖动后 bot 没反应时用)',
         `- \`/doctor [描述]\` — 把日志和描述交给 ${escapedAgentName} 自助诊断`,
-        '- `/help` / `/usage` — 使用帮助与本群 Skills',
+        '- `/help` / `/usage` — 使用帮助、本群 Skills 与资料清单',
         '',
         `其他内容直接交给 ${escapedAgentName}。`,
       ].join('\n'),

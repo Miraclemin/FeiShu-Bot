@@ -1,3 +1,4 @@
+import { createChannelCache } from './channel-cache';
 import { projectRunContext, projectBindingHint } from '../team/project-bindings';
 import type {
   LarkChannel,
@@ -231,6 +232,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
   };
 
   const opts: LarkChannelOptions = {
+    cache: createChannelCache(),
     appId: cfg.accounts.app.id,
     appSecret,
     domain:
@@ -695,6 +697,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     ? `${msg.chatId}:${threadId}`
     : msg.chatId;
   log.info('intake', 'enter', {
+    profile: controls.profile,
     scope,
     chatType: msg.chatType,
     chatMode,
@@ -738,7 +741,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     requireMentionForChat(controls.profileConfig, controls.cfg, msg.chatId) &&
     !msg.mentionedBot
   ) {
-    log.info('intake', 'skip-no-mention', { scope, chatType: msg.chatType });
+    log.info('intake', 'skip-no-mention', { profile: controls.profile, scope, chatType: msg.chatType });
     return;
   }
 

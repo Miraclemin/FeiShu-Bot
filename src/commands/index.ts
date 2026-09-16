@@ -1,4 +1,4 @@
-import { discoverSkills } from '../agent/workbench-skills';
+import { workbenchInfo } from './workbench-info';
 import { handleProject, readProject, projectCardText } from '../team/project-bindings';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -84,6 +84,7 @@ import { createBoundChat, defaultChatName } from '../bot/group';
 import { fetchKnownChats, type KnownChat } from '../bot/lark-info';
 import { describeMeetingError, type MeetingManager } from '../meeting/manager';
 import { isMeetingNo } from '../meeting/api';
+import { sharedMeetingInvite } from '../meeting/shared-invite';
 import { answerInMeeting, meetingScopeId } from '../meeting/orchestrator';
 import type { MeetingSession } from '../meeting/session';
 import { hasStructuredLarkCliUserAuth } from '../lark-cli/identity-policy';
@@ -214,20 +215,37 @@ const ADMIN_COMMANDS = new Set([
   '/meeting',
 ]);
 
-function isAdminCommand(cmd: string): boolean {
-  return ADMIN_COMMANDS.has(cmd.startsWith('/') ? cmd : `/${cmd}`);
+function isAdminCommand(cmd: string, args: string): boolean {
+  const name = cmd.startsWith('/') ? cmd : `/${cmd}`;
+  // Content queries are scoped to the calling group below; lifecycle remains owner-only.
+  if (name === '/meeting' && ['ask', 'notes', 'transcript'].includes(args.trim().split(/\s+/)[0] ?? '')) return false;
+  return ADMIN_COMMANDS.has(name);
 }
 
 export async function tryHandleCommand(ctx: CommandContext): Promise<boolean> {
   const trimmed = ctx.msg.content.trim();
-  if (!trimmed.startsWith('/')) return false;
+  if (!trimmed.startsWith('/')) {
+    if (!ctx.controls.profileConfig.meeting.enabled || !ctx.controls.profileConfig.meeting.autoJoinOnInvite) return false;
+    const invite = sharedMeetingInvite(ctx.msg);
+    if (!invite) return false;
+    if (!canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok) {
+      await reply(ctx, '请让机器人创建者分享会议邀请，或在会议内添加机器人。');
+      return true;
+    }
+    if (!invite.meetingNo) {
+      await reply(ctx, '收到会议链接，但未能读出唯一的会议号。请发送「会议号：123456789」，我会尝试加入。');
+      return true;
+    }
+    await handleMeeting(`join ${invite.meetingNo}`, ctx);
+    return true;
+  }
   const parts = trimmed.split(/\s+/);
   const cmd = parts[0] ?? '';
   const args = parts.slice(1).join(' ');
   const h = handlers[cmd];
   if (!h) return false;
   if (
-    isAdminCommand(cmd) &&
+    isAdminCommand(cmd, args) &&
     !canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok
   ) {
     log.info('command', 'admin-deny', {
@@ -255,7 +273,7 @@ export async function runCommandHandler(
   const h = handlers[`/${name}`];
   if (!h) return false;
   if (
-    isAdminCommand(name) &&
+    isAdminCommand(name, args) &&
     !canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok
   ) {
     log.info('command', 'admin-deny', {
@@ -817,7 +835,7 @@ async function larkCliStatus(ctx: CommandContext): Promise<'app' | 'user-ready' 
 async function handleTeamProject(args: string, ctx: CommandContext): Promise<void> {
   return handleProject(args, ctx, reply, canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok);
 }
-async function handleStatus(_args: string, ctx: CommandContext): Promise<void> {
+async function handleStatus(args: string, ctx: CommandContext): Promise<void> {
   let projectBinding: string | undefined;
   if (['codex', 'inspector', 'product-manager'].includes(ctx.controls.profile)) {
     try { projectBinding = projectCardText(readProject(ctx)); }
@@ -832,6 +850,7 @@ async function handleStatus(_args: string, ctx: CommandContext): Promise<void> {
       ? ctx.sessionCatalog.activeFor(ctx.sessionCatalogIdentity)
       : undefined;
   const card = statusCard({
+    workbenchInfo: workbenchInfo(ctx.controls.profileConfig, ctx.msg.chatId, args),
     projectBinding,
     profileName: ctx.controls.profile,
     cwd,
@@ -1346,16 +1365,9 @@ function formatDoctorEchoStatus(echoText: string, state: RunState): string {
   return state.terminal;
 }
 
-async function handleHelp(_args: string, ctx: CommandContext): Promise<void> {
-  const group = ctx.controls.profileConfig.workbench?.groups[ctx.msg.chatId];
-  let skills = '当前对话未配置群 Skills。';
-  if (group) {
-    try {
-      const catalog = new Map(discoverSkills(group.workspace || undefined).map(s => [s.id, s.name]));
-      skills = (group.skills ?? []).map(id => catalog.get(id) ?? '技能已移动或删除，请重新选择').join('、') || '本群未选择 Skills。';
-    } catch { skills = '技能目录暂时无法读取，请在工作台检查。'; }
-  }
-  const card = helpCard(ctx.agent.displayName, skills);
+async function handleHelp(args: string, ctx: CommandContext): Promise<void> {
+  const info = workbenchInfo(ctx.controls.profileConfig, ctx.msg.chatId, args);
+  const card = helpCard(ctx.agent.displayName, undefined, info);
   await ctx.channel.send(ctx.msg.chatId, { card }, commandReplyOptions(ctx));
 }
 
@@ -2257,7 +2269,7 @@ async function handleMeeting(args: string, ctx: CommandContext): Promise<void> {
           question,
           // Typed privately -> answer only to the caller. Broadcasting a
           // summary somebody asked for in a DM would surprise the meeting.
-          { deliver: 'caller' },
+          { deliver: 'caller', actorId: ctx.msg.senderId },
         );
         await reply(ctx, answer || '（没有产生回答）');
       } catch (err) {
@@ -2298,17 +2310,19 @@ function pickMeetingSession(
   ctx: CommandContext,
   explicit: string,
 ): PickedSession {
+  const isAdmin = canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok;
+  const all = manager.all().filter(s => isAdmin ||
+    (ctx.msg.chatType === 'group' && s.originChatId === ctx.msg.chatId));
   const wanted = explicit.replace(/\s/g, '');
   if (wanted) {
-    const found = manager.byMeetingNo(wanted);
+    const found = all.find(s => s.meetingNo === wanted);
     return found
       ? { ok: true, session: found }
       : { ok: false, message: `没找到会议号 ${wanted} 对应的会议。用 \`/meeting\` 看当前在跟哪几场。` };
   }
 
-  const all = manager.all();
   if (all.length === 0) {
-    return { ok: false, message: '当前没有在跟的会议。先 `/meeting join <9位会议号>`。' };
+    return { ok: false, message: isAdmin ? '当前没有在跟的会议。先 `/meeting join <9位会议号>`。' : '当前聊天没有可查询的会议。请在会中 @ 机器人提问，或在创建者邀请机器人入会的群内查询。' };
   }
   if (all.length === 1) return { ok: true, session: all[0]! };
 

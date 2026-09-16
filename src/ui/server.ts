@@ -1,4 +1,7 @@
+import { permissionStatus } from './permission-status';
+import { permissionDraft } from './permission-draft';
 import { listBaseTables } from './base-picker';
+import { resourceNames } from './resource-names';
 import { checkWorkbench } from './workbench-check';
 import { discoverSkills } from '../agent/workbench-skills';
 import { searchDirectoryUsers, startDirectoryLogin } from '../lark-cli/user-im';
@@ -27,7 +30,7 @@ import {
   userLoginComplete,
   userLoginStart,
 } from './api';
-import { activateProfile, listBots, listProfiles, renameProfile, setProfileAvatar } from './fleet';
+import { deleteProfile, activateProfile, listBots, listProfiles, renameProfile, setProfileAvatar } from './fleet';
 import { onboardCreate, onboardState, onboardValidate } from './onboard';
 import { finishQrRegistration, qrStatus, startQrRegistration } from './qr-register';
 import {
@@ -147,6 +150,14 @@ async function route(
   }
 
   if (path === '/api/agents' && g) { sendJson(res, 200, { agents: await agentInventory() }); return; }
+  if (path === '/api/workbench/resource-names' && p) {
+    const profile = url.searchParams.get('profile');
+    if (!profile) throw new HttpError(400, '缺少 Agent');
+    await getWorkbench(profile, deps.rootDir);
+    const body = await readJsonBody(req) as { links?: unknown };
+    if (!Array.isArray(body.links) || body.links.length > 100 || body.links.some(x => typeof x !== 'string' || x.length > 2048)) throw new HttpError(400, '资料列表无效');
+    sendJson(res, 200, await resourceNames(profile, body.links, sup.channelFor(profile), deps.rootDir)); return;
+  }
   if (path === '/api/workbench/base-tables' && p) {
     const profile=url.searchParams.get('profile'); if(!profile) throw new HttpError(400,'Missing profile');
     const body=await readJsonBody(req) as {link:string;offset?:number};
@@ -158,6 +169,16 @@ async function route(
     const profile = url.searchParams.get('profile');
     if (!profile) throw new HttpError(400, 'Missing profile');
     sendJson(res, 200, await checkWorkbench(profile, await readJsonBody(req), deps.rootDir)); return;
+  }
+  if (path === '/api/workbench/permission-status' && g) {
+    const profile = url.searchParams.get('profile'); if (!profile) throw new HttpError(400, '缺少 Agent');
+    const app = await getWorkbench(profile, deps.rootDir);
+    sendJson(res, 200, await permissionStatus(sup.channelFor(profile), app.appId)); return;
+  }
+  if (path === '/api/workbench/permission-draft' && (g || p)) {
+    const profile = url.searchParams.get('profile');
+    if (!profile) throw new HttpError(400, '缺少 Agent');
+    sendJson(res, 200, await permissionDraft(profile, deps.rootDir, p ? await readJsonBody(req) : undefined)); return;
   }
   if (path === '/api/workbench') {
     const profile = url.searchParams.get('profile');
@@ -186,6 +207,11 @@ async function route(
     const body = await readJsonBody(req) as { profile?: string; displayName?: unknown };
     if (!body.profile) throw new HttpError(400, 'profile is required');
     sendJson(res, 200, await renameProfile(body.profile, body.displayName, deps.rootDir));
+    return;
+  }
+  if (path === '/api/profiles/delete' && p) {
+    const body = await readJsonBody(req) as { profile?: unknown };
+    sendJson(res, 200, await deleteProfile(sup, body.profile, deps.rootDir));
     return;
   }
   if (path === '/api/profiles/start' && p) {
@@ -217,7 +243,9 @@ async function route(
     return;
   }
   if (path === '/api/profiles/qr/start' && p) {
-    sendJson(res, 200, await startQrRegistration(deps.rootDir));
+    const body = await readJsonBody(req) as { mode?: unknown };
+    if (body.mode !== undefined && body.mode !== 'existing' && body.mode !== 'new') throw new HttpError(400, 'Invalid registration mode');
+    sendJson(res, 200, await startQrRegistration(deps.rootDir, body.mode === 'existing' ? 'existing' : 'new'));
     return;
   }
   if (path === '/api/profiles/qr/status' && g) {

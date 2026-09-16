@@ -121,8 +121,7 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
       </div>
 
       {startError && <p role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">启动失败：{startError}</p>}
-      <WorkbenchView profile={profile} onApplied={() => void loadRuntime()} />
-      <details className="rounded-lg border p-4"><summary className="cursor-pointer">飞书连接与高级设置</summary><div className="mt-4"><ConfigView profile={profile} /></div></details>
+      <WorkbenchView profile={profile} onApplied={() => void loadRuntime()} advanced={<details className="rounded-lg border p-4"><summary className="cursor-pointer">飞书连接与高级设置</summary><div className="mt-4"><ConfigView profile={profile} /></div></details>} />
 
       <Dialog open={avatarOpen} onOpenChange={open => { if (!avatarSaving) setAvatarOpen(open); }}>
         <DialogContent>

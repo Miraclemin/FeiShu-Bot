@@ -61,6 +61,7 @@ export async function onboardValidate(body: unknown) {
 }
 
 export interface CreateProfileInput {
+  deferAgentPreflight?: boolean;
   profile: string;
   agentKind: AgentKind;
   appId: string;
@@ -129,12 +130,16 @@ export async function writeNewProfile(
     throw new HttpError(409, `profile 已存在：${profile}，请换个名字`);
   }
 
+  const existingApp = Object.entries(pre?.profiles ?? {}).find(([, p]) => p.accounts.app.id === input.appId && p.accounts.app.tenant === input.tenant);
+  if (existingApp) throw new HttpError(409, `该应用已绑定到「${existingApp[0]}」，请打开已有机器人`);
+
   const encrypted = await encryptAccount(input, appPaths);
 
   let profileConfig;
   try {
     profileConfig = await createBootstrapProfileConfig({
       agentKind: input.agentKind,
+      deferAgentPreflight: input.deferAgentPreflight,
       accounts: encrypted.accounts,
       preferences: encrypted.preferences,
       secrets: encrypted.secrets,
@@ -157,6 +162,8 @@ export async function writeNewProfile(
     if (root.profiles[profile]) {
       throw new HttpError(409, `profile 已存在：${profile}，请换个名字`);
     }
+    const duplicate = Object.entries(root.profiles).find(([, p]) => p.accounts.app.id === input.appId && p.accounts.app.tenant === input.tenant);
+    if (duplicate) throw new HttpError(409, `该应用已绑定到「${duplicate[0]}」，请打开已有机器人`);
     root.profiles[profile] = { ...profileConfig, secrets: undefined };
     if (!root.secrets && encrypted.secrets) root.secrets = encrypted.secrets;
     await saveRootConfig(root, appPaths.configFile);

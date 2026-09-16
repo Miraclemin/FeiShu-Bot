@@ -34,8 +34,74 @@ interface Harness {
 const cleanups: Array<() => Promise<void>> = [];
 
 describe('Bridge command contracts', () => {
+  it('joins shared meeting invitations with origin and reports join errors', async () => {
+    const h = await createHarness();
+    h.controls.profileConfig.meeting.enabled = true;
+    h.controls.profileConfig.meeting.autoJoinOnInvite = true;
+    const join = vi.fn().mockResolvedValue({ meetingNo: '123456789' });
+    h.controls.meeting = { join } as unknown as Controls['meeting'];
+    await h.run('会议号：123 456 789', { senderId: 'ou-owner' });
+    expect(join).toHaveBeenCalledWith('123456789', { originChatId: 'chat-1' });
+    expect(lastMarkdown(h.channel)).toContain('已入会');
+    join.mockRejectedValue(new Error('host must enable AI Summary'));
+    await h.run('会议号：123456789', { senderId: 'ou-owner' });
+    expect(lastMarkdown(h.channel)).toContain('入会失败');
+  });
+
+  it('does not auto-join unknown links, disabled automation, or non-owner shares', async () => {
+    const h = await createHarness();
+    h.controls.profileConfig.workbench = { revision: 1, protectDocuments: true, groups: {} };
+    h.controls.profileConfig.meeting.enabled = true;
+    h.controls.profileConfig.meeting.autoJoinOnInvite = true;
+    const join = vi.fn();
+    h.controls.meeting = { join } as unknown as Controls['meeting'];
+    await h.run('https://vc.feishu.cn/j/opaque', { senderId: 'ou-owner' });
+    expect(lastMarkdown(h.channel)).toContain('未能读出');
+    await h.run('会议号：123456789', { senderId: 'ou-member' });
+    expect(lastMarkdown(h.channel)).toContain('创建者');
+    h.controls.profileConfig.meeting.autoJoinOnInvite = false;
+    expect(await h.run('会议号：123456789', { senderId: 'ou-owner' })).toBe(false);
+    expect(join).not.toHaveBeenCalled();
+  });
+
   afterEach(async () => {
     await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
+  });
+
+  it.each(['/config', '/account', '/cd /tmp', '/reconnect', '/meeting join 123456789', '/meeting leave'])(
+    'keeps workbench management owner-only: %s', async command => {
+      const h = await createHarness();
+      h.controls.profileConfig.workbench = { revision: 1, protectDocuments: true, groups: {} };
+      await h.run(command, { senderId: 'ou-admin' });
+      expect(lastMarkdown(h.channel)).toContain('仅管理员');
+    },
+  );
+
+  it('allows group members to inspect only their group meeting, not private or other group meetings', async () => {
+    const h = await createHarness();
+    h.controls.profileConfig.workbench = { revision: 1, protectDocuments: true, groups: {} };
+    h.controls.profileConfig.meeting.enabled = true;
+    const session = { meetingNo: '123456789', originChatId: 'oc_team', recentTranscript: () => ['本群会议字幕'] };
+    h.controls.meeting = { all: () => [session] } as unknown as Controls['meeting'];
+    await h.run('/meeting transcript', { senderId: 'ou-member', chatId: 'oc_team', chatMode: 'group' });
+    expect(lastMarkdown(h.channel)).toContain('本群会议字幕');
+    await h.run('/meeting transcript 123456789', { senderId: 'ou-member', chatId: 'oc_other', chatMode: 'group' });
+    expect(lastMarkdown(h.channel)).not.toContain('本群会议字幕');
+    await h.run('/meeting transcript 123456789', { senderId: 'ou-member', chatId: 'oc_team' });
+    expect(lastMarkdown(h.channel)).not.toContain('本群会议字幕');
+  });
+
+  it.each(['/status', '/help', '/usage'])('shows current group bindings in %s', async command => {
+    const h = await createHarness();
+    h.controls.profileConfig.workbench = { revision: 1, protectDocuments: true, groups: {
+      oc_team: { enabled: true, name: '内容群', workspace: '', persona: '先查素材再回答', role: 'product-manager', documents: [], skills: [], resources: ['https://example.feishu.cn/docx/content'] },
+    } };
+    await h.run(command, { senderId: 'ou-member', chatId: 'oc_team', chatMode: 'group' });
+    const card = JSON.stringify(lastContent(h.channel));
+    expect(card).toContain('先查素材再回答');
+    expect(card).toContain('https://example.feishu.cn/docx/content');
+    expect(card).toContain('已绑定 Skills');
+    expect(card).toContain('本次未验证访问权限');
   });
 
   it('switches /cd to any existing non-risk working directory', async () => {
@@ -347,6 +413,7 @@ async function createHarness(): Promise<Harness> {
       channel: channel as unknown as CommandContext['channel'],
       msg: message(content, {
         chatId,
+        chatType: overrides.chatMode === 'group' ? 'group' : 'p2p',
         senderId: overrides.senderId ?? 'ou-admin',
         mentions: overrides.mentions ?? [],
       }),
@@ -384,6 +451,7 @@ function message(
   content: string,
   opts: {
     chatId: string;
+    chatType?: 'p2p' | 'group';
     senderId: string;
     mentions?: NormalizedMessage['mentions'];
   },
@@ -391,7 +459,7 @@ function message(
   return {
     messageId: `om-${content.replace(/\W+/g, '-').slice(0, 20)}`,
     chatId: opts.chatId,
-    chatType: 'p2p',
+    chatType: opts.chatType ?? 'p2p',
     senderId: opts.senderId,
     senderName: 'User',
     content,

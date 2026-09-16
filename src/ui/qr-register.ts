@@ -38,18 +38,9 @@ function uniqueProfileName(base: string, existing: Set<string>): string {
   return `${b}-${i}`;
 }
 
-/**
- * QR app-creation session. Mirrors the terminal `runRegistrationWizard`:
- * `registerApp` yields a QR URL to scan and resolves with fresh app
- * credentials once the user finishes creating the app in Feishu. Two phases so
- * the agent/profile choice is applied at scan time, not baked into the QR:
- *   start  → shows the QR (poll {@link qrStatus} for 'scanned')
- *   finish → writes the profile from the created app creds + chosen agent/profile
- * The App Secret lives only in the session (localhost, short TTL) between the
- * two, and is cleared right after the profile is written.
- */
+/** Completed registrations are persisted immediately, independently of the wizard. */
 interface QrSession {
-  status: 'pending' | 'scanned' | 'done' | 'error';
+  status: 'pending' | 'saving' | 'scanned' | 'done' | 'error';
   qrUrl: string;
   expireIn: number;
   app?: { appId: string; appSecret: string; tenant: TenantBrand };
@@ -63,7 +54,22 @@ interface QrSession {
 }
 
 const sessions = new Map<string, QrSession>();
-const SESSION_TTL_MS = 20 * 60 * 1000;
+const SESSION_TTL_MS = 65 * 60 * 1000;
+let persistenceQueue: Promise<unknown> = Promise.resolve();
+
+export function persistRegisteredApp(app: {appId:string;appSecret:string;tenant:TenantBrand}, botName: string | undefined, rootDir?:string): Promise<{profile:string}> {
+  const task = persistenceQueue.catch(()=>undefined).then(async()=>{
+    const root = await loadRootConfig(resolveAppPaths({rootDir}).configFile);
+    const existing = Object.entries(root?.profiles ?? {}).find(([,p])=>p.accounts.app.id===app.appId && p.accounts.app.tenant===app.tenant);
+    if(existing)return {profile:existing[0]};
+    const installed = await detectInstalledAgents().catch(()=>[]);
+    const agentKind = installed.find(a=>a.kind==='codex')?.kind ?? installed[0]?.kind ?? 'codex';
+    const profile=uniqueProfileName(sanitizeProfileName(botName ?? '') || app.appId,new Set(Object.keys(root?.profiles ?? {})));
+    return writeNewProfile({...app,profile,agentKind,deferAgentPreflight:true},rootDir);
+  });
+  persistenceQueue=task;
+  return task;
+}
 
 function prune(now: number): void {
   for (const [id, s] of sessions) {
@@ -76,7 +82,7 @@ function prune(now: number): void {
  * render it); the app is created out-of-band when the user scans — track via
  * {@link qrStatus}, then call {@link finishQrRegistration}.
  */
-export async function startQrRegistration(rootDir?: string): Promise<{
+export async function startQrRegistration(rootDir?: string, mode: 'existing' | 'new' = 'new'): Promise<{
   sessionId: string;
   qrUrl: string;
   expireIn: number;
@@ -90,6 +96,8 @@ export async function startQrRegistration(rootDir?: string): Promise<{
     let readied = false;
     registerApp({
       source: 'lark-channel-bridge',
+      createOnly: mode === 'new',
+      ...(mode === 'existing' ? { addons: { preset: false } } : {}),
       onQRCodeReady: (info) => {
         session.qrUrl = info.url;
         session.expireIn = info.expireIn;
@@ -98,6 +106,7 @@ export async function startQrRegistration(rootDir?: string): Promise<{
       },
     })
       .then(async (result) => {
+        session.status = 'saving';
         const tenant: TenantBrand = result.user_info?.tenant_brand ?? 'feishu';
         session.app = { appId: result.client_id, appSecret: result.client_secret, tenant };
         // Fetch the app/bot name and derive a profile-name suggestion.
@@ -109,7 +118,10 @@ export async function startQrRegistration(rootDir?: string): Promise<{
           Object.keys((await loadRootConfig(resolveAppPaths({ rootDir }).configFile))?.profiles ?? {}),
         );
         session.suggestedProfile = uniqueProfileName(sanitizeProfileName(info?.botName ?? ''), existing);
-        session.status = 'scanned';
+        const created = await persistRegisteredApp(session.app, session.botName, rootDir);
+        session.profile = created.profile;
+        session.app = undefined;
+        session.status = 'done';
         log.info('ui', 'qr-register-scanned', { appId: result.client_id, botName: info?.botName });
       })
       .catch((err) => {

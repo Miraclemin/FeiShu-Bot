@@ -7,6 +7,8 @@ files:
   - dist/**
   - desktop/main.cjs
   - desktop/preload.cjs
+  - desktop/meeting-setup.cjs
+  - desktop/permission-setup.cjs
   - resources/**
   - "!resources/mascots/*-generation.json"
   - package.json

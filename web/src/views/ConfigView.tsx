@@ -1,4 +1,3 @@
-import { PermissionGuide } from './PermissionGuide';
 import { DirectoryAuthorization } from './DirectoryAuthorization';
 import { useEffect, useState, type ReactNode } from "react";
 import { QRCodeSVG } from "qrcode.react";
@@ -134,7 +133,7 @@ export function ConfigView({ profile }: { profile: string }) {
           </Badge>
         </CardHeader>
         <CardContent className="space-y-3">
-          {cfg.workbenchProtected ? <p className="text-sm">工作台保护已启用：仅创建者可发起任务，群配置在上方管理。</p> : <Field label="个人版 / 团队版" hint="团队版：任何人 @ 即可使用（不做白名单）；CLI 强制只用应用身份。管理命令仍限 owner/管理员。">
+          {cfg.workbenchProtected ? <p className="text-sm">工作台保护已启用：创建者管理配置，所有人均可使用；群内使用需在上方启用该群。</p> : <Field label="个人版 / 团队版" hint="团队版：任何人 @ 即可使用（不做白名单）；CLI 强制只用应用身份。管理命令仍限 owner/管理员。">
             <SelectRow value={cfg.mode} onChange={(v) => set("mode", v as ConfigData["mode"])}
               options={[["personal", "个人版（默认）"], ["team", "团队版"]]} />
           </Field>}
@@ -183,7 +182,7 @@ export function ConfigView({ profile }: { profile: string }) {
             机器人身份：使用应用已获批的接口权限和机器人可见的资料。例如读取已分享给机器人的项目文档。它仍可能读到敏感资料，并不代表所有群成员都有权查看。
           </p>
           <p className="text-xs text-muted-foreground">账号身份：代表扫码授权的那个账号，不是当前 @ 机器人的人，也不自动等于机器人的创建者。例如：你扫码后，机器人使用你的权限；你无权读取的文档，它用你的身份也不能读取。若张三单独扫码，则该次绑定代表张三。实际访问还受应用已开通的接口和用户同意范围限制。若李四仅仅 @ 机器人，并不会自动变成李四的权限。若允许他人借用你的授权，仍可能泄露你的文档；不能用一个共享授权冒充每位请求者的权限。</p>
-          <p className="text-xs text-muted-foreground">工作台当前固定使用机器人身份，且仅创建者可执行。用于搜索人和群的账号授权只服务于本机配置，不自动开放给群里的 Agent。</p>
+          <p className="text-xs text-muted-foreground">工作台固定使用机器人身份；创建者管理配置，成员共享已配置的机器人能力。用于搜索人和群的账号授权只服务于本机配置，不自动开放给群里的 Agent。</p>
           {team && (
             <p className="text-xs text-primary">⚠️ 团队版已开启：本项被覆盖为「只允许应用身份」。切回个人版后恢复。</p>
           )}
@@ -197,7 +196,7 @@ export function ConfigView({ profile }: { profile: string }) {
       />
 
       <Card>
-        <CardHeader><CardTitle>飞书群连接</CardTitle>{cfg.workbenchProtected && <p className="text-xs text-muted-foreground">以下名单不会扩大工作台的创建者执行权限。加入群后，请回到上方群配置启用。</p>}</CardHeader>
+        <CardHeader><CardTitle>飞书群连接</CardTitle>{cfg.workbenchProtected && <p className="text-xs text-muted-foreground">加入群后，请回到上方群配置启用；启用后所有群成员均可使用，配置仅创建者可改。</p>}</CardHeader>
         <CardContent className="space-y-4">
           {team && (
             <p className="text-xs text-primary">团队版下访问控制不生效（任何人可用）；以下配置保留，切回个人版后恢复。</p>
@@ -637,7 +636,8 @@ function AllowedChats({
   );
 }
 
-export function GroupPicker({ profile, open, onOpenChange, added, onPick }: {
+export function GroupPicker({ profile, open, onOpenChange, added, onPick, onAuthorize }: {
+  onAuthorize?: () => void;
   profile: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -662,7 +662,7 @@ export function GroupPicker({ profile, open, onOpenChange, added, onPick }: {
             <BotChatsPane profile={profile} open={open} added={added} onPick={onPick} />
           </TabsContent>
           <TabsContent value="mine" className="min-w-0">
-            <MyChatsPane profile={profile} open={open} added={added} onPick={onPick} />
+            <MyChatsPane onAuthorize={onAuthorize} profile={profile} open={open} added={added} onPick={onPick} />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -726,7 +726,8 @@ function BotChatsPane({ profile, open, added, onPick }: {
 const LIST_SCOPES = ["im:chat:read"];
 const ADD_BOT_SCOPES = ["im:chat:read", "im:chat.members:write_only"];
 
-function MyChatsPane({ profile, open, added, onPick }: {
+function MyChatsPane({ profile, open, added, onPick, onAuthorize }: {
+  onAuthorize?: () => void;
   profile: string;
   open: boolean;
   added: string[];
@@ -783,6 +784,7 @@ function MyChatsPane({ profile, open, added, onPick }: {
   }, [open, profile]);
 
   async function startAuth(scopes: string[]) {
+    if (onAuthorize) { onAuthorize(); return; }
     setBusy(true); setError(null);
     try {
       setLogin(await apiPost<DeviceLogin>("/api/auth/login/start", { profile, scopes }));
@@ -872,10 +874,9 @@ function MyChatsPane({ profile, open, added, onPick }: {
   if (status && !canList) {
     return (
       <div className="space-y-3 py-2">
-        <p className="text-sm text-muted-foreground">列出「我的群」需要先给应用开通权限，再用你的账号扫码。创建机器人时的扫码不等于这次用户授权。</p>
+        <p className="text-sm text-muted-foreground">请先在顶部「飞书连接」中完成个人授权，即可查看你加入的群。</p>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <PermissionGuide profile={profile} />
-        <Button onClick={() => startAuth(LIST_SCOPES)} disabled={busy}>{busy ? "请稍候…" : "去授权（查看群）"}</Button>
+        <Button onClick={() => startAuth(LIST_SCOPES)} disabled={busy}>{busy ? "请稍候…" : (onAuthorize ? "前往权限管理" : "授权并查看我的群")}</Button>
       </div>
     );
   }

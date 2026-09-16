@@ -1,0 +1,27 @@
+import { afterEach, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { permissionDraft } from '../../../src/ui/permission-draft';
+import { createDefaultProfileConfig } from '../../../src/config/profile-schema';
+import { createRootConfig, saveRootConfig } from '../../../src/config/profile-store';
+const roots: string[] = [];
+afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+it('persists choices across independent loads, isolates bots, and never reports authorization', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'permission-draft-')); roots.push(root);
+  const cfg = createDefaultProfileConfig({ agentKind: 'claude', accounts: { app: { id: 'cli_test', secret: 'test', tenant: 'feishu' } } });
+  const config = createRootConfig('one', cfg); config.profiles.two = structuredClone(cfg);
+  await saveRootConfig(config, join(root, 'config.json'));
+  expect((await permissionDraft('one', root)).saved).toBe(false);
+  await permissionDraft('one', root, { appId: 'cli_test', selected: ['chat-history', 'table-write'] });
+  expect(await permissionDraft('one', root)).toMatchObject({ selected: ['chat-history', 'table-write'], saved: true, authorization: 'not-checked' });
+  expect((await permissionDraft('two', root)).saved).toBe(false);
+  await permissionDraft('one', root, { appId: 'cli_test', selected: [] });
+  expect((await permissionDraft('one', root)).selected).toEqual([]);
+  await expect(permissionDraft('one', root, { appId: 'cli_other', selected: [] })).rejects.toThrow('应用已变更');
+  await expect(permissionDraft('one', root, { appId: 'cli_test', selected: ['invalid'] })).rejects.toThrow('权限选择无效');
+  expect((await permissionDraft('one', root)).selected).toEqual([]);
+  config.profiles.one!.accounts.app.id = 'cli_changed';
+  await saveRootConfig(config, join(root, 'config.json'));
+  expect((await permissionDraft('one', root)).saved).toBe(false);
+});

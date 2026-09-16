@@ -14,6 +14,7 @@ export interface BootstrapProfileInput {
   workspace?: string;
   defaultWorkspace?: string;
   codexBinaryPath?: string;
+  deferAgentPreflight?: boolean;
   profileDir?: string;
 }
 
@@ -27,7 +28,7 @@ export async function createBootstrapProfileConfig(
       : undefined;
   const codex =
     input.agentKind === 'codex'
-      ? await createBootstrapCodexConfig(input.codexBinaryPath)
+      ? input.deferAgentPreflight ? {binaryPath: input.codexBinaryPath ?? process.env.LARK_CHANNEL_CODEX_BIN ?? 'codex'} : await createBootstrapCodexConfig(input.codexBinaryPath)
       : undefined;
   const profile = createDefaultProfileConfig({
     agentKind: input.agentKind,

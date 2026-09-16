@@ -26,6 +26,7 @@ export interface TranscriptEvent {
 
 export interface ChatEvent {
   kind: 'chat';
+  messageId?: string;
   from: MeetingActor;
   content: string;
   /** Feishu's in-meeting message type; `3` is a reaction rather than text. */
@@ -132,7 +133,8 @@ export function unpackActivity(item: RawActivityItem, botOpenId?: string): Meeti
         if (!content) break;
         out.push({
           kind: 'chat',
-          from: actor(it, 'sender', 'user', 'from'),
+          ...(str(it.message_id) ? { messageId: str(it.message_id) } : {}),
+          from: actor(it, 'operator', 'sender', 'user', 'from'),
           content,
           ...(num(it.message_type) !== undefined ? { messageType: num(it.message_type) } : {}),
         });

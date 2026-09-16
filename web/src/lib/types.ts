@@ -24,6 +24,7 @@ export interface BotInfo {
 }
 
 export interface ProfileInfo {
+  needsSetup?: boolean;
   avatarId?: string;
   displayName?: string;
   name: string;

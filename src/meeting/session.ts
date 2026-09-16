@@ -199,6 +199,12 @@ export class MeetingSession {
   }
 
   private handle(event: MeetingEvent): void {
+    // Envelope IDs differ between push and polling; the chat message ID does not.
+    if (event.kind === 'chat' && event.messageId) {
+      const key = `chat-message:${event.messageId}`;
+      if (this.seenEvents.has(key)) return;
+      this.seenEvents.add(key);
+    }
     if (event.kind === 'transcript') {
       this.handleTranscript(event);
       return;

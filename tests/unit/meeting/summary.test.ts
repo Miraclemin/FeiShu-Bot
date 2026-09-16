@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ startRunFlow: vi.fn() }));
 
 vi.mock('../../../src/bot/run-flow', () => ({ startRunFlow: mocks.startRunFlow }));
 
-const { summarizeEndedMeeting, resolveSummaryTarget, attachMeetingAgent } = await import(
+const { summarizeEndedMeeting, resolveSummaryTarget, attachMeetingAgent, answerInMeeting } = await import(
   '../../../src/meeting/orchestrator'
 );
 const { MeetingSession } = await import('../../../src/meeting/session');
@@ -98,6 +98,23 @@ beforeEach(() => {
 });
 
 describe('summarizeEndedMeeting', () => {
+  it('returns execution failure rather than an empty answer', async () => {
+    const d = deps(cfg(), 'oc_team');
+    mocks.startRunFlow.mockResolvedValue({ ...fakeRun(''), execution: { subscribe: () => ({ async *[Symbol.asyncIterator]() {
+      yield { type: 'error', message: '模型连接失败', terminationReason: 'failed' };
+    } }) } });
+    expect(await answerInMeeting(d.args, '总结', { deliver: 'caller' })).toBe('执行失败：模型连接失败');
+  });
+  it('delivers Codex final_text even without streaming text', async () => {
+    const d = deps(cfg({ summaryOnEnd: true }), 'oc_team');
+    mocks.startRunFlow.mockResolvedValue({ ...fakeRun(''), execution: { subscribe: () => ({ async *[Symbol.asyncIterator]() {
+      yield { type: 'final_text', content: '最终答案' };
+      yield { type: 'done' };
+    } }) } });
+    await summarizeEndedMeeting(d.args);
+    expect(d.sent).toHaveLength(1);
+    expect(JSON.stringify(d.sent[0])).toContain('最终答案');
+  });
   it('does nothing when summaryOnEnd is off', async () => {
     const d = deps(cfg({ summaryOnEnd: false }), 'oc_team');
     await summarizeEndedMeeting(d.args);
@@ -225,5 +242,19 @@ describe('continuous listening while answering', () => {
     finish(fakeRun('已总结'));
     await vi.waitFor(() => expect(noopClient.request).toHaveBeenCalled());
     d.session.dispose();
+  });
+});
+
+
+describe('workbench meeting participation', () => {
+  it.each(['ou_owner', 'ou_member', undefined])('allows a meeting question from %s without impersonating the owner', async actorId => {
+    const d = deps(cfg(), 'oc_team', 'ou_owner');
+    const args = d.args as unknown as import('../../../src/meeting/orchestrator').MeetingAgentDeps;
+    args.controls.profileConfig.workbench = { groups: {} } as typeof args.controls.profileConfig.workbench;
+    await answerInMeeting(args, '总结', { deliver: 'caller', actorId });
+    expect(mocks.startRunFlow).toHaveBeenCalledWith(expect.objectContaining({
+      scope: expect.objectContaining({ actorId: actorId ?? 'meeting' }),
+      access: { ok: true, reason: 'allowed-chat' },
+    }));
   });
 });
