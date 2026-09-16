@@ -1,94 +1,266 @@
-# feishu-collaborator
+<p align="center">
+  <img src="resources/branding/icon.png" width="112" alt="Feishu Collaborator 应用图标">
+</p>
 
-基于 [Miraclemin/lark-team-agent-bridge](https://github.com/Miraclemin/lark-team-agent-bridge) 当前工作树独立创建。
+<h1 align="center">Feishu Collaborator</h1>
 
-桌面工作台：Mac / Windows 共用 Electron + React，支持四种本机 Agent 检测和切换。使用方法及尚未实现的权限边界见 [WORKBENCH.md](docs/WORKBENCH.md)。
+<p align="center"><strong>让你电脑上的 AI Agent，在飞书群里参与项目工作。</strong></p>
+<p align="center">连接飞书、本机 Agent 与项目资料，把任务入口放在日常沟通的地方。</p>
 
-基于 [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge) 的源码维护版本。把飞书消息连接到本机 Codex/Claude，并为产品、研发、巡检角色提供独立项目配置。
+<p align="center">
+  <a href="https://github.com/Miraclemin/feishu-collaborator/releases"><img src="https://img.shields.io/badge/Download-macOS%20%7C%20Windows-2563eb?style=flat-square" alt="下载 macOS 和 Windows 客户端"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-15803d?style=flat-square" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/Agent-Runs%20locally-475569?style=flat-square" alt="Agent 在本机运行">
+</p>
 
-**这不是给已安装文件打补丁的版本。** 新功能已经进入 `src/`，通过 TypeScript 构建生成 `dist/cli.js`。安装包携带所需 Python 配置工具，运行时不加载旧 `bridge_extension/commands.mjs`，也不执行补丁脚本。
+<p align="center">
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#可以用它做什么">使用场景</a> ·
+  <a href="#配置你的工作台">工作台配置</a> ·
+  <a href="#常见问题">常见问题</a> ·
+  <a href="#项目来源与致谢">来源与致谢</a>
+</p>
 
-- 上游基线：`589868119ce9a0a860aaf4936b5f9bac14e72681`，0.7.1。
-- 本分支版本：`0.8.0-preview.1`。
-- 保留上游 MIT 许可证与来源说明；[原版使用说明](docs/UPSTREAM-README.zh.md)。
-- 项目和 App 名称为 `feishu-collaborator`；保留 `lark-channel-bridge` CLI 别名以兼容现有调用。当前尚未发布 npm 包。
+---
 
-## 下载与分享
+## 这是什么
 
-从 [GitHub Releases](https://github.com/Miraclemin/feishu-collaborator/releases) 下载预览版。Mac 选择 arm64（Apple Silicon）或 x64（Intel），Windows 选择 x64 的 exe。安装包没有 Apple 公证或 Windows 商业签名；Windows 安装运行尚未真机验收。
+Feishu Collaborator 是一个开源桌面工作台，将飞书机器人连接到你电脑上已经安装的 <strong>Codex、Claude Code、Hermes 或 OpenClaw</strong>。
 
-发给朋友的入口：[安装与首次使用](docs/GETTING-STARTED.zh.md)。每个人安装自己的客户端、登录自己的 Agent、创建自己的飞书机器人。当前仅机器人创建者可以发起本机任务。
+你可以在客户端里管理机器人，为不同飞书群选择工作目录、工作角色、Skills 和项目资料。配置完成后，由机器人创建者在飞书群里发起任务，本机 Agent 执行，再把结果回复到群里。
 
-## 当前验证边界
+它适合已经在使用本机 Agent，希望从飞书发起项目任务的开发者、产品负责人和独立创作者。你继续使用自己的模型账号、代码目录和飞书资料；客户端负责把这些入口连接起来。
 
-当前使用本机 Agent CLI；历史 Docker 严格隔离原型已停用。技能选择不是文件访问沙箱，不应视为生产就绪。安装包以预览版发布，系统支持与限制见下文。
+> <strong>先认识一个使用前提：</strong>当前桌面工作台只允许机器人创建者发起本机任务。群聊可以作为项目讨论与结果共享的地方，普通群成员暂时不能借用创建者的账号权限执行任务。
 
-## 本次新增和迁移了什么
+## 为什么做这个项目
 
-| 功能 | 实现与边界 |
-|---|---|
-| 群/Topic 项目绑定 | `/project show/help/set`，以 profile＋群ID＋Topic ID 区分；未知项目不回退到其他群 |
-| 同一张状态卡 | `/status` 同时显示运行状态、产品网址、源码、项目工作目录和各表链接；原按钮保留 |
-| 电脑执行权限 | `/config` 增加只读、限制写入范围、Full；保存 defaultAccess/maxAccess；影响当前机器人所有群，下一任务生效 |
-| 管理权限 | 绑定修改和执行权限仍受原创建者/管理员规则约束；忙碌时拒绝权限修改 |
-| 真实群上下文 | 每次 IM 调用传入 `LARK_PROJECT_CHAT_ID` / `LARK_PROJECT_TOPIC_ID`，并在提示词中给出配置读取入口 |
-| Keychain 兼容 | product-manager 在 workspace 模式使用 Codex `--approve-for-me`，单条命令接受审查；不降级钥匙串、不导出密钥；Full 保持原语义 |
-| 只读配置 | 查看绑定不写锁文件；修改用文件锁＋原子替换，避免只读沙箱报错 |
-| 旧项目对接 | 配置数据迁到 Bridge home；已有 Skill/定时工具可以使用薄兼容入口继续读取同一份数据 |
+一个项目的上下文往往散在不同地方：讨论在飞书群，需求和 Bug 在多维表格，代码在电脑里，而 Agent 又有自己的对话窗口。
 
-## 飞书里怎么用
+当你想让 AI 帮忙时，经常要重新找链接、说明项目背景、切换工作目录，再把结果搬回群里。换一个项目，这些步骤又要做一遍。
 
-在目标群 @ 对应机器人，每条命令单独发送：
+Feishu Collaborator 希望减少这类重复准备：<strong>把群、项目目录、角色和资料关联起来，让你在熟悉的沟通入口发起工作。</strong>产品、研发、巡检可以有不同的角色配置，也可以围绕同一份需求或 Bug 记录继续讨论。具体要做什么、何时写入、何时上线，仍由任务要求和实际授权决定。
+
+## 可以用它做什么
+
+例如，你在维护一个产品，想先弄清楚一个反馈，再决定是否修改：
 
 ```text
-@产品 /status
-@产品 /config
-@产品 /project help
-@产品 /project set name 我的产品
-@产品 /project set url https://example.com
-@产品 /project set repo /实际源码目录
-@产品 /project set requirements 飞书需求表完整链接
+你在飞书群 @ 自己的机器人：
+
+“这是用户反馈的 Bug 记录：<记录链接>。
+先结合当前项目代码分析原因，给出修改建议，暂时不要改代码。”
 ```
 
-表字段：`requirements` 需求、`bugs` 缺陷、`records` 巡检记录、`directions` 巡检方向、`logs` 探索日志。链接须包含 `/base/...?...table=tbl...`。
+机器人使用这个群配置的本机引擎、工作目录和技能处理任务，并在群里回复。确认方案后，你可以继续给出下一步指令。读取飞书记录需要相应工具和资源权限；执行效果也取决于所选 Agent 与技能。
 
-项目绑定按机器人＋群/Topic保存；**电脑执行权限按机器人保存**。`/cd` 修改项目工作目录，不修改产品网址或表格。个人/团队模式、允许群、是否需要@，继续沿用上游访问控制。团队模式会跳过聊天允许名单，管理命令仍限管理员。
+| 使用场景 | 你可以怎样配置和提问 |
+| --- | --- |
+| 整理需求 | 选择产品经理角色，关联需求表，请它梳理背景、问题与验收条件 |
+| 分析与修复 Bug | 选择研发角色，指定代码目录和 Bug 表，从问题分析开始，再明确授权修改 |
+| 检查产品体验 | 选择巡检角色，配合已安装的浏览器等技能，检查指定页面或流程 |
+| 切换项目 | 给不同群设置各自的目录、资料和回复要求，减少重复说明 |
+| 使用不同 Agent | 在同一工作台管理本机引擎，根据任务选择 Codex、Claude Code、Hermes 或 OpenClaw |
 
-手动任务回复原群/Topic。增加绑定不等于新建定时任务。现有产品/巡检批处理的 Topic 报告仍未接入，不能将命令支持 Topic 等同于整套业务自动化已验证。
+角色提供工作方向，Skills 提供任务指引；浏览器、飞书工具和其他技能依赖仍需在本机配置。选择角色本身不会自动完成整套业务流程。
 
-## 源码开发、构建、安装
+## 它怎样工作
 
-新增项目绑定工具目前使用 Unix 文件锁，支持 macOS/Linux；Windows 保留上游核心测试，但本扩展的绑定落盘尚未适配。
+<p align="center">
+  <img src="assets/readme/workflow.svg" width="100%" alt="机器人创建者在飞书群发起任务，桌面工作台加载群配置，本机 Agent 执行后回复原群。">
+</p>
 
-需要 Node.js 22.12+、pnpm 10、Python 3.9+，以及已登录的本机 Agent CLI。workspace 自动命令审批需要支持 `--approve-for-me` 的 Codex 版本。
+1. <strong>飞书是任务入口。</strong>机器人创建者在已启用的群里 @ 机器人提出请求。
+2. <strong>工作台提供群配置。</strong>找到对应的目录、角色、技能清单和项目资料。
+3. <strong>本机 Agent 执行任务。</strong>沿用使用者自己的 Agent 登录状态，按所选工具及权限工作。
+4. <strong>结果回到原群。</strong>你在讨论发生的地方查看回复，再决定下一步。
+
+任务由你的电脑运行，电脑需要联网并保持唤醒。模型请求仍通过对应 Agent 的模型服务处理，“本机运行”不代表离线模型。
+
+## 快速开始
+
+### 1. 下载客户端
+
+前往 <strong>[GitHub Releases 下载](https://github.com/Miraclemin/feishu-collaborator/releases)</strong>，根据电脑选择安装包：
+
+| 系统 | 选择的文件 | 安装方式 |
+| --- | --- | --- |
+| macOS · Apple Silicon（M 系列） | `…-mac-arm64.dmg` | 打开 DMG，将应用拖入 Applications |
+| macOS · Intel | `…-mac-x64.dmg` | 打开 DMG，将应用拖入 Applications |
+| Windows · x64 | `…-win-x64.exe` | 运行安装向导，选择安装目录 |
+
+当前提供预览版。Mac 安装包尚未经过 Apple 公证，Windows 安装包尚未商业签名，系统可能提示确认；Windows 实际安装运行仍待真机验证。下载页提供 `SHA256SUMS.txt` 校验文件，具体安装提示见[安装指南](docs/GETTING-STARTED.zh.md)。
+
+### 2. 准备自己的 Agent
+
+至少安装并登录下面一种本机 CLI，并先在终端确认它能够正常回答问题：
+
+| 引擎 | 工作台中的使用方式 |
+| --- | --- |
+| Codex | 使用本机 Codex CLI 与登录状态 |
+| Claude Code | 使用本机 Claude Code CLI 与登录状态 |
+| Hermes | 使用本机 Hermes CLI；当前适配需要完整本机权限 |
+| OpenClaw | 使用本机 OpenClaw CLI；当前适配需要完整本机权限 |
+
+客户端会检测引擎是否安装。<strong>检测到安装不等于已经登录</strong>，模型订阅、API 配置与额度由你自行准备。使用第三方 Skill 时，也要安装它依赖的工具。
+
+### 3. 创建 Agent，连接飞书
+
+1. 打开客户端，<strong>新建 Agent</strong>，选择本机可用的引擎。
+2. 按界面提示扫码，创建或绑定自己的飞书机器人。
+3. 在权限准备页面选择需要的能力，复制权限配置，到对应飞书应用后台导入。
+4. 完成飞书应用发布和企业审批（如需要），再回到客户端完成对应授权。
+5. 将机器人加入用于测试的飞书群。
+
+飞书应用权限与具体文档、表格的访问权限需要分别配置。导入权限配置不会自动让机器人获得所有资料的访问权。
+
+### 4. 配置群，发出第一条消息
+
+进入该 Agent 的工作台，点击 <strong>“搜索并选择群”</strong>，完成以下配置：
+
+- <strong>角色：</strong>选择它在这个群负责产品、研发还是巡检。
+- <strong>工作目录：</strong>选择本机项目文件夹。
+- <strong>项目资料：</strong>填写项目名称、网址，以及需要关联的需求表、Bug 表或其他飞书资料。
+- <strong>Skills：</strong>勾选本群任务需要加载的技能。
+- <strong>群状态：</strong>打开“在这个群启用”，保存配置并启动 Agent。
+
+然后，由创建者在飞书群里 @ 机器人：
+
+```text
+@你的机器人 你好，请介绍一下你在这个群里的工作角色。
+```
+
+收到回复后，再尝试一个范围明确的任务：
+
+```text
+@你的机器人 请阅读当前项目的 README，概括它的用途，不修改文件。
+```
+
+## 配置你的工作台
+
+### 按群组织项目
+
+同一个机器人可以为不同群保存各自的项目配置。比如，产品 A 的群使用产品 A 的代码目录和需求表，产品 B 的群使用另一套配置。
+
+| 配置项 | 用途 |
+| --- | --- |
+| 工作角色 | 为群里的任务设置产品经理、研发或巡检方向 |
+| 项目名称与网址 | 帮助 Agent 理解正在处理哪个产品 |
+| 本机工作目录 | 确定任务启动时所在的目录 |
+| 需求表与 Bug 表 | 提供业务记录入口，可通过界面选择具体表格 |
+| 其他飞书资料 | 补充本群需要参考的文档链接 |
+| 人格与回复要求 | 例如“先给结论，再给一个具体例子” |
+| 技能清单 | 选择本群任务需要加载的 Skills |
+
+<strong>目录与资料链接是工作上下文。</strong>工作目录不是文件访问沙箱，资料链接也不构成严格的逐文档访问控制。只配置你愿意让该 Agent 使用的目录和工具权限。
+
+### Skills 与工具
+
+工作台可以发现本机及工作目录中的技能，并提供内置角色和飞书工作指引。选择角色时，会加入相应角色与基础飞书技能；你可以继续调整本群的清单。
+
+Skill 通常是一份任务指引，告诉 Agent 如何做某类工作。勾选 Skill 不会自动安装浏览器工具、配置 MCP、登录飞书 CLI，或开通接口权限。首次使用一项能力时，先检查它的依赖和授权是否齐全。
+
+### 切换引擎
+
+你可以在工作台切换本机引擎，继续使用同一个飞书机器人。切换会开始新对话；正在运行任务时需要先等任务结束。不同引擎支持的权限模式和会话机制有所不同，详情见[工作台说明](docs/WORKBENCH.md)。
+
+## 日常使用
+
+除自然语言任务外，也可以在飞书里 @ 机器人发送命令。<strong>每条命令单独发送。</strong>
+
+| 命令 | 用途 |
+| --- | --- |
+| `/help` 或 `/usage` | 查看帮助与当前群的技能提示 |
+| `/status` | 查看运行状态与项目入口 |
+| `/config` | 查看或调整机器人配置，修改受管理权限约束 |
+| `/project show` | 查看当前群或 Topic 的项目绑定 |
+| `/project help` | 查看项目配置命令 |
+| `/new` | 开始新对话 |
+
+第一次使用建议从读取和分析开始，再给出明确的修改要求。例如：“先解释原因”“只修改这个文件”“完成后运行相关测试”。是否可以执行取决于所选引擎和权限设置。
+
+<details>
+<summary><strong>进阶：通过飞书命令配置项目</strong></summary>
+
+也可以逐条发送：
+
+```text
+@你的机器人 /project set name 我的产品
+@你的机器人 /project set url https://example.com
+@你的机器人 /project set repo /你的本机项目目录
+@你的机器人 /project set requirements 飞书需求表完整链接
+@你的机器人 /project set bugs 飞书Bug表完整链接
+```
+
+表格链接应包含 `/base/` 及具体的 `table=tbl...` 参数。项目绑定按机器人、群与 Topic 区分；电脑执行权限按机器人保存。更多字段及命令以 `/project help` 为准。
+
+</details>
+
+## 常见问题
+
+### 需要部署服务器吗？
+
+使用桌面客户端不需要另行部署服务器。任务在本机运行，客户端、网络和 Agent 必须可用。关闭最后一个应用窗口会停止该客户端管理的机器人；电脑休眠后也不能继续正常处理新任务。
+
+### 可以分享给朋友吗？
+
+可以，直接分享[下载页面](https://github.com/Miraclemin/feishu-collaborator/releases)即可。朋友需要在自己的电脑安装客户端，登录自己的 Agent，并绑定自己的飞书机器人。不要把自己的 App Secret、token 或配置目录一起发送。
+
+### 同一个群里的其他人也能调用吗？
+
+当前桌面工作台只允许经过验证的机器人创建者发起本机任务。把机器人加到群里，不会自动授权所有成员操作创建者的电脑或资料。回复会出现在群里，请根据群成员的可见范围选择任务内容。
+
+### 找不到群，或者读不了表格怎么办？
+
+先检查机器人是否已加入目标群，再检查应用权限是否开通并发布、相应扫码授权是否完成，以及实际使用的身份是否有该文档或表格的访问权。“群已绑定”和“资料能读取”是两个独立条件。
+
+### 配置保存在哪里？
+
+桌面客户端默认使用 `~/.lark-workbench`；命令行工具默认使用 `~/.lark-channel`。这些目录包含本机配置和运行数据，请妥善保管。开发时可通过 `LARK_WORKBENCH_HOME` 为桌面客户端指定其他目录。
+
+## 从源码运行
+
+适合希望修改项目或参与贡献的开发者。需要 <strong>Node.js 22.12+、pnpm 10.33.0</strong>；使用 Python 项目绑定工具时还需要 Python 3.9+，该工具目前依赖 Unix 文件锁。
 
 ```bash
+git clone https://github.com/Miraclemin/feishu-collaborator.git
+cd feishu-collaborator
+corepack enable
 pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm test
-python3 -m unittest discover -s resources -p 'test_*.py'
-pnpm build
-pnpm pack --pack-destination /tmp
-npm install -g /tmp/feishu-collaborator-0.8.0-preview.1.tgz
-lark-channel-bridge restart --profile product-manager
-lark-channel-bridge restart --profile inspector
-lark-channel-bridge restart --profile codex
-lark-channel-bridge ps
+pnpm desktop:dev
 ```
 
-本地 UI 测试需要允许监听 `127.0.0.1`。不要把沙箱 `listen EPERM` 当作产品失败，也不要跳过断言来“通过”。
+常用开发命令：
 
-## 数据与兼容迁移
+```bash
+pnpm typecheck       # TypeScript 类型检查
+pnpm test            # 自动化测试
+pnpm build           # 构建前端与 Bridge
+pnpm desktop:pack    # 生成本机应用目录
+pnpm desktop:dist    # 生成当前平台安装包
+```
 
-- 应用凭据、群访问权限、工作目录、会话仍由原 `~/.lark-channel/` 管理，本仓库不包含这些私有配置。
-- 项目绑定存于 `$LARK_CHANNEL_HOME/project-bindings.json`（默认 `~/.lark-channel`）；可显式指定 `LARK_PROJECT_BINDINGS_FILE`。
-- 原定时工具的明确默认群存于 `project-defaults.json`。群内调用优先使用真实事件上下文，不能用默认值猜群。
-- 已有 Bug/产品/巡检 Skill 与业务脚本继续在用户的工作流项目维护；本仓库负责 Bridge 接入层和绑定协议，不复制业务截图、需求正文或应用源码。
-- 从旧本机补丁方案迁移：先备份原安装包和本地工具，运行 `tools/migrate-local-bindings.py --legacy-tools <原工具目录> --package-root <安装包目录> --link-compat`。它保留原绝对路径入口为指向安装包资源的兼容链接；新的 Bridge 本身不依赖旧扩展代码。
-- 不在本仓库提交 App Secret、token、绑定数据、运行截图和历史记录。
+桌面程序基于 <strong>Electron + React + TypeScript</strong>，底层复用 Bridge 的消息通道、配置管理和 Agent 适配器。前端使用 Vite 构建，通过 electron-builder 打包。
 
-## 验证与回滚
+## 文档与参与
 
-迁移前保存原安装目录、配置和通道服务文件；部署采用本地构建的 tarball。验证三个 profile 重新连接、项目绑定一致、只读表格访问正常。出错时先恢复原安装目录和兼容入口，再逐个重启；不要删除或重建飞书机器人。
+- [安装与首次使用](docs/GETTING-STARTED.zh.md)：下载安装、初次连接与分享。
+- [工作台说明](docs/WORKBENCH.md)：引擎适配、技能机制与权限行为。
+- [上游中文文档](docs/UPSTREAM-README.zh.md)：了解底层 Bridge 的背景与原有用法。
+- [提交 Issue](https://github.com/Miraclemin/feishu-collaborator/issues)：反馈问题或讨论想法。
 
-权限表单和状态卡有源码测试；新项目表仍需核对字段与权限，配置完整不代表浏览器登录或真实开发上线已验收。
+欢迎通过 Issue 和 Pull Request 参与改进。报告问题时请附操作系统、客户端版本、所用引擎、复现步骤与脱敏后的错误信息；不要提交密钥、访问令牌或私有聊天内容。
+
+## 项目来源与致谢
+
+Feishu Collaborator 基于 [Miraclemin/lark-team-agent-bridge](https://github.com/Miraclemin/lark-team-agent-bridge) 独立演进，延续其飞书消息连接与项目配置能力，并增加桌面工作台、按群配置、本机多引擎选择及项目资料入口。
+
+其源码基础来自 [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge)。感谢上游作者和贡献者提供飞书与本机 Agent 之间的连接基础。本仓库保留上游许可证与原版文档。
+
+也感谢 Electron、React、TypeScript、Vite 等开源项目，以及相关 Agent 和飞书工具生态的建设者。
+
+## License
+
+本项目以 <strong>[MIT License](LICENSE)</strong> 开源。你可以在遵守许可证条件的前提下使用、修改和分发，也可以用于商业用途；分发时需要保留版权声明和许可证声明。
+
+项目保留上游版权声明。第三方依赖遵循各自的许可证；模型服务与飞书服务的使用仍适用其各自条款。
