@@ -12,7 +12,7 @@ export interface SkillSelection { ids: string[]; }
 /** Read metadata only; never execute skill scripts while discovering. */
 export function discoverSkills(cwd?: string, extraRoots: string[] = []): WorkbenchSkill[] {
   const home = homedir();
-  const roots = [resolve(dirname(fileURLToPath(import.meta.url)), '../resources/skills'), resolve(dirname(fileURLToPath(import.meta.url)), '../../resources/skills'),join(home, '.agents/skills'), join(process.env.CODEX_HOME || join(home, '.codex'), 'skills'),
+  const roots = [join(home, '.feishu-collaborator/team-skills/installed'), resolve(dirname(fileURLToPath(import.meta.url)), '../resources/skills'), resolve(dirname(fileURLToPath(import.meta.url)), '../../resources/skills'),join(home, '.agents/skills'), join(process.env.CODEX_HOME || join(home, '.codex'), 'skills'),
     join(home, '.claude/skills'), join(home, '.hermes/skills'), join(home, '.openclaw/skills'),
     join(home, '.codex/plugins/cache'), join(home, '.claude/plugins/cache'), '/etc/codex/skills', ...extraRoots];
   if (cwd) { let dir = resolve(cwd); while (true) { roots.push(join(dir, '.agents/skills'), join(dir, '.claude/skills'), join(dir, 'skills')); const parent = dirname(dir); if (parent === dir) break; dir = parent; } }
@@ -31,7 +31,12 @@ export function discoverSkills(cwd?: string, extraRoots: string[] = []): Workben
       const text = readFileSync(file, 'utf8');
       let meta: Record<string, unknown> = {};
       try { const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text); if (m) meta = parseYaml(m[1]!) || {}; } catch { /* malformed metadata is displayed using folder name */ }
-      result.push({ id: createHash('sha256').update(file).digest('hex').slice(0, 24), name: String(meta.name || basename(real)), description: String(meta.description || '').slice(0, 500), path: file });
+      let version = '';
+      const installRecord = join(dirname(real), 'installation.json');
+      if (real.startsWith(join(home, '.feishu-collaborator/team-skills/installed') + '/') && existsSync(installRecord)) {
+        try { version = ' · ' + String(JSON.parse(readFileSync(installRecord, 'utf8')).commit).slice(0, 12); } catch { /* retain the skill metadata */ }
+      }
+      result.push({ id: createHash('sha256').update(file).digest('hex').slice(0, 24), name: String(meta.name || basename(real)) + version, description: String(meta.description || '').slice(0, 500), path: file });
       return;
     }
     if (depth >= 12) throw new Error('技能目录层级过深，无法完整检查');

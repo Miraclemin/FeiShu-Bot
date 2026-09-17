@@ -1,3 +1,4 @@
+import { ResourceSharing } from './ResourceSharing';
 import { RolePicker } from './RolePicker';
 import { ConnectionCheckResults } from './ConnectionCheckResults';
 import { ResourceList } from './ResourceList';
@@ -87,6 +88,7 @@ export function WorkbenchView({ profile, onApplied, advanced }: { profile: strin
         <h3 className="font-medium">2. 它服务哪个项目？</h3>
         {([['name','项目名称','例如：我的产品'],['url','产品网址（选填）','https://']] as const).map(([key,label,placeholder]) => <div key={key}><Label htmlFor={'project-'+key}>{label}</Label><Input id={'project-'+key} placeholder={placeholder} value={project[key]} onChange={e=>patchGroup({project:{...project,[key]:e.target.value}})} /></div>)}
         <BaseTablePicker key={profile+selected} profile={profile} appId={settings.appId} tenant={settings.tenant} onAdd={urls=>{patchGroup({resources:[...new Set([...(group.resources ?? [project.requirements,project.bugs].filter(Boolean)),...urls])]});setConnection(null);}} />
+        <ResourceSharing key={'share'+profile+selected} name={group.name || project.name} links={group.resources ?? [project.requirements,project.bugs].filter(Boolean)} onAdd={resources=>{patchGroup({resources});setConnection(null);}} />
         <ResourceList key={profile+selected} profile={profile} links={group.resources ?? [project.requirements,project.bugs].filter(Boolean)} onChange={resources=>{patchGroup({resources});setConnection(null);}} />
         <Button disabled={checking} variant="outline" onClick={async()=>{setChecking(true);setConnection(null);try{setConnection(await apiPost(`/api/workbench/check?profile=${encodeURIComponent(profile)}`,{workbench:settings.workbench,chatId:selected}));}catch(e){setError((e as Error).message);}finally{setChecking(false);}}}>{checking ? '正在逐份检查资料…' : '3. 检查资料访问权限'}</Button>
         {connection && <ConnectionCheckResults checks={connection.checks} note={connection.note} />}

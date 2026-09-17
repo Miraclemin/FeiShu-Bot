@@ -1,3 +1,5 @@
+import { TeamResources } from './views/TeamResources';
+import { Button } from '@/components/ui/button';
 import { appMascot } from './components/AgentAvatar';
 import { AgentOverview } from './views/AgentOverview';
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -8,6 +10,7 @@ import { ProfilesView } from "@/views/ProfilesView";
 import { ProfileDetail } from "@/views/ProfileDetail";
 
 export function App() {
+  const [teamOpen, setTeamOpen] = useState(false);
   const [onboard, setOnboard] = useState<OnboardState | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -40,10 +43,11 @@ export function App() {
 
   return (
     <Shell>
-      {selected ? (
+      {teamOpen ? <TeamResources onBack={() => setTeamOpen(false)} /> : selected ? (
         <ProfileDetail profile={selected} onBack={() => { setSelected(null); void refresh(); }} />
       ) : (
         <>
+          <div className="flex justify-end mb-4"><Button variant="outline" onClick={() => setTeamOpen(true)}>团队资源 · 资料与 Skill</Button></div>
           <AgentOverview />
           <ProfilesView onOpen={setSelected} />
           {status && (

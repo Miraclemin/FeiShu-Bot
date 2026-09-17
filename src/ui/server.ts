@@ -1,3 +1,4 @@
+import { previewRepository, installTeamSkill, installedTeamSkills } from './team-skills';
 import { permissionStatus } from './permission-status';
 import { permissionDraft } from './permission-draft';
 import { listBaseTables } from './base-picker';
@@ -312,6 +313,13 @@ async function route(
     const profile = body.profile ?? (await readActiveProfile(deps.rootDir));
     if (!profile) throw new HttpError(400, 'profile is required');
     sendJson(res, 200, await userLoginComplete(profile, deps.rootDir, body));
+    return;
+  }
+  if (path === '/api/team-skills' && g) { sendJson(res, 200, { installed: await installedTeamSkills() }); return; }
+  if ((path === '/api/team-skills/preview' || path === '/api/team-skills/install') && p) {
+    const body = await readJsonBody(req) as { source?: string; token?: string; key?: string };
+    try { sendJson(res, 200, path.endsWith('/preview') ? await previewRepository(body.source) : await installTeamSkill(body.token, body.key)); }
+    catch(e) { throw new HttpError(400, (e as Error).message); }
     return;
   }
   if (path === '/api/skills' && g) {
