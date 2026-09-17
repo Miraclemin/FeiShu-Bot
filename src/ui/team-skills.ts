@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { join, relative, basename, dirname } from 'node:path';
+import { join, relative, basename, dirname, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { parse } from 'yaml';
 const exec = promisify(execFile);
@@ -69,7 +69,7 @@ export async function scanSkillRepo(repo: string): Promise<Entry[]> {
       const content = await fs.readFile(file,'utf8'); if(content.length>128000) throw new Error('SKILL.md 内容过长');
       let meta: Record<string,unknown> = {}; const match=/^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
       if(match) meta=parse(match[1]!) || {};
-      found.push({key:relative(repo,dir)||'.', name:String(meta.name||basename(dir)),description:String(meta.description||'').slice(0,500),content,files:paths.map(p=>relative(dir,p))});
+      found.push({key:relative(repo,dir).split(sep).join('/')||'.', name:String(meta.name||basename(dir)),description:String(meta.description||'').slice(0,500),content,files:paths.map(p=>relative(dir,p))});
     }
     return paths;
   }
