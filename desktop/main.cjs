@@ -1,9 +1,28 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, Tray, Menu, nativeImage } = require('electron');
 const { join, delimiter } = require('node:path');
 const { homedir } = require('node:os');
 const { readdirSync, readFileSync } = require('node:fs');
 const { pathToFileURL } = require('node:url');
-let host, window, quitting = false;
+let host, window, tray, quitting = false, shutdownStarted = false;
+function showWorkbench() {
+  if (!window || window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+function installMenuBar() {
+  if (process.platform !== 'darwin') return;
+  const icon = nativeImage.createFromPath(join(__dirname, '..', 'resources', 'branding', 'owlTrayTemplate.png'));
+  icon.setTemplateImage(true);
+  tray = new Tray(icon);
+  tray.setToolTip('feishu-collaborator · 关闭窗口后继续运行');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开工作台', click: showWorkbench },
+    { label: '隐藏窗口', click: () => window?.hide() },
+    { type: 'separator' },
+    { label: '退出（停止机器人）', click: () => app.quit() },
+  ]));
+}
 function augmentPath() {
   const home = homedir();
   const dirs = [join(home, '.local', 'bin'), join(home, '.cargo', 'bin'), '/opt/homebrew/bin', '/usr/local/bin'];
@@ -13,7 +32,8 @@ function augmentPath() {
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => { window?.show(); window?.focus(); });
+  app.on('second-instance', showWorkbench);
+  app.on('activate', showWorkbench);
   app.whenReady().then(async () => {
     augmentPath();
     process.env.LARK_CHANNEL_HOME = process.env.LARK_WORKBENCH_HOME || join(homedir(), '.lark-workbench');
@@ -25,6 +45,13 @@ else {
     window = new BrowserWindow({ width: 1100, height: 840, minWidth: 760, minHeight: 600,
       title: 'feishu-collaborator', icon: join(__dirname, '..', 'resources', 'branding', 'icon.png'), backgroundColor: '#ffffff',
       webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    installMenuBar();
+    window.on('close', event => {
+      if (tray && !quitting) {
+        event.preventDefault();
+        window.hide();
+      }
+    });
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('https://')) void shell.openExternal(url);
       return { action: 'deny' };
@@ -97,8 +124,19 @@ else {
     });
     await window.loadURL(host.url);
   }).catch(err => { dialog.showErrorBox('工作台启动失败', String(err)); app.quit(); });
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => { if (!tray) app.quit(); });
   app.on('before-quit', event => {
-    if (host && !quitting) { event.preventDefault(); quitting = true; host.close().finally(() => app.quit()); }
+    quitting = true;
+    if (host) {
+      event.preventDefault();
+      if (shutdownStarted) return;
+      shutdownStarted = true;
+      Promise.resolve().then(() => host.close()).catch(err => console.error('工作台退出清理失败', err)).finally(() => {
+        host = null;
+        tray?.destroy();
+        tray = null;
+        app.quit();
+      });
+    }
   });
 }
