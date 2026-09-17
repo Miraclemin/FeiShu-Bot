@@ -41,6 +41,8 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - run: pnpm test:desktop
+
       - name: Typecheck
         run: pnpm typecheck
 

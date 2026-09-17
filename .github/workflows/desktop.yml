@@ -23,6 +23,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm exec tsc -p web/tsconfig.json --noEmit
       - run: pnpm test
+      - run: pnpm test:desktop
+
       - run: pnpm build
       - run: pnpm exec electron-builder --config desktop/electron-builder.yml --publish never
         env:

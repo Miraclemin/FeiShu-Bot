@@ -1,6 +1,6 @@
 {
   "name": "feishu-collaborator",
-  "version": "0.8.0-preview.3",
+  "version": "0.8.0-preview.4",
   "description": "Feishu desktop collaborator with per-group agents, skills and workspace configuration",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -52,7 +52,8 @@
     "prepublishOnly": "pnpm typecheck && pnpm build",
     "desktop:dev": "pnpm build && electron desktop/main.cjs",
     "desktop:pack": "pnpm build && electron-builder --config desktop/electron-builder.yml --dir",
-    "desktop:dist": "pnpm build && electron-builder --config desktop/electron-builder.yml"
+    "desktop:dist": "pnpm build && electron-builder --config desktop/electron-builder.yml",
+    "test:desktop": "node --test desktop/main.check.cjs"
   },
   "dependencies": {
     "@clack/prompts": "^1.4.0",
