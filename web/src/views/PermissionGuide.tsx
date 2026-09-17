@@ -30,7 +30,7 @@ export function PermissionGuide({profile}:{profile:string}) {
    {row('会议事件',meeting,meeting?'已配置':'待核验')}
   </div>
   <div className="flex items-center gap-2 border-t pt-3">
-   <Button disabled={busy||checking||ready} onClick={setup}>{busy?'请在飞书窗口继续…':ready?'应用权限已开通':granted?'一键配置会议':'一键开通全部功能权限'}</Button>
+   <>{!ready && <Button disabled={busy||checking} onClick={setup}>{busy?'请在飞书窗口继续…':ready?'应用权限已开通':granted?'一键配置会议':'一键开通全部功能权限'}</Button>}</>
    <Button variant="ghost" size="sm" disabled={checking||busy} onClick={()=>{setMessage('');setAuthRefresh(x=>x+1);void refresh();}}><RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${checking?'animate-spin':''}`}/>重新检查</Button>
   </div>
   {(message||status?.message)&&<p role="status" className="text-xs text-muted-foreground">{message||status?.message}</p>}

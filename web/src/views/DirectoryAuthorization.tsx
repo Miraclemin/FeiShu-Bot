@@ -1,27 +1,31 @@
-import { PermissionGuide } from './PermissionGuide';
-import { useState } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { apiPost } from '@/lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { apiGet } from '@/lib/api';
+import type { UserAuthStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-export function DirectoryAuthorization({ profile, onConnected }: { profile: string; onConnected: () => void }) {
-  const [login, setLogin] = useState<{ verificationUrl: string; deviceCode: string } | null>(null);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  async function start() {
-    setBusy(true); setError('');
-    try { setLogin(await apiPost('/api/directory/login/start', { profile })); }
-    catch(e) { setError((e as Error).message); } finally { setBusy(false); }
-  }
-  async function finish() {
-    if (!login) return; setBusy(true); setError('');
-    try { await apiPost('/api/auth/login/complete', { profile, deviceCode: login.deviceCode }); setLogin(null); onConnected(); }
-    catch(e) { setError((e as Error).message); } finally { setBusy(false); }
-  }
-  return <div className="space-y-2 text-xs">
-    <p className="text-muted-foreground">人员搜索需要你的飞书账号授权，仅用于此配置页面，不开放给群内 Agent。</p>
-    <PermissionGuide profile={profile} />
-    <Button size="sm" variant="outline" disabled={busy} onClick={start}>连接／补充人员查询授权</Button>
-    {error && <p role="alert" className="text-destructive">{error}</p>}
-    {login && <div className="space-y-2"><div className="inline-block bg-white p-3"><QRCodeSVG value={login.verificationUrl} size={160} /></div><p><a className="underline" href={login.verificationUrl} target="_blank" rel="noreferrer">或在浏览器打开授权页面</a></p><Button size="sm" disabled={busy} onClick={finish}>我已完成授权，重新查询</Button></div>}
+export function DirectoryAuthorization({ profile, onConnected }: { profile: string; onConnected: (ready: boolean) => void }) {
+  const [ready, setReady] = useState<boolean | null>(null);
+  const [error, setError] = useState(false);
+  const callback = useRef(onConnected); callback.current = onConnected;
+  useEffect(() => {
+    let cancelled = false;
+    setReady(null); setError(false);
+    async function check() {
+      try {
+        const status = await apiGet<UserAuthStatus>(`/api/auth/status?profile=${encodeURIComponent(profile)}`);
+        if (cancelled) return;
+        const ok = status.loggedIn && status.scopes.includes('contact:user:search');
+        setReady(ok); setError(false);
+        callback.current(ok);
+      } catch { if (!cancelled) { setReady(null); setError(true); } }
+    }
+    const changed = (event: Event) => { if ((event as CustomEvent).detail === profile) void check(); };
+    void check(); window.addEventListener('focus',check); window.addEventListener('workbench-auth-changed',changed);
+    return () => { cancelled = true; window.removeEventListener('focus',check); window.removeEventListener('workbench-auth-changed',changed); };
+  }, [profile]);
+  if (ready) return null;
+  if (ready === null && !error) return <p className="text-xs text-muted-foreground">正在检查人员搜索授权…</p>;
+  return <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+    <span>{error ? '暂时无法检查授权，请到顶部重新检查。' : '尚未授权人员搜索，请到顶部补充个人授权。'}</span>
+    <Button size="sm" variant="link" onClick={() => { document.getElementById('user-permissions')?.scrollIntoView({behavior:'smooth',block:'center'}); document.getElementById('authorize-my-groups')?.focus({preventScroll:true}); }}>前往授权设置</Button>
   </div>;
 }

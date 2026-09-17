@@ -662,7 +662,7 @@ export function GroupPicker({ profile, open, onOpenChange, added, onPick, onAuth
             <BotChatsPane profile={profile} open={open} added={added} onPick={onPick} />
           </TabsContent>
           <TabsContent value="mine" className="min-w-0">
-            <MyChatsPane onAuthorize={onAuthorize} profile={profile} open={open} added={added} onPick={onPick} />
+            <MyChatsPane onAuthorize={onAuthorize ?? (() => { onOpenChange(false); requestAnimationFrame(() => { document.getElementById('user-permissions')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.getElementById('authorize-my-groups')?.focus({ preventScroll: true }); }); })} profile={profile} open={open} added={added} onPick={onPick} />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -942,6 +942,8 @@ function AccessList({ profile, label, ids, onAdd, onRemove }: {
   const [loading, setLoading] = useState(false);
   const [more, setMore] = useState(false);
   const [authRevision, setAuthRevision] = useState(0);
+  const [directoryReady, setDirectoryReady] = useState(false);
+  useEffect(() => { setDirectoryReady(false); }, [profile, open]);
   useEffect(() => {
     if (!ids.length) return;
     let cancelled = false;
@@ -950,7 +952,7 @@ function AccessList({ profile, label, ids, onAdd, onRemove }: {
     return () => { cancelled = true; };
   }, [profile, ids.join(',')]);
   useEffect(() => {
-    if (!open) return;
+    if (!open || !directoryReady) { setUsers([]); setError(''); setLoading(false); return; }
     let cancelled = false;
     setLoading(true); setError(''); setUsers([]);
     const timer = setTimeout(() => {
@@ -959,7 +961,7 @@ function AccessList({ profile, label, ids, onAdd, onRemove }: {
         .catch(e => { if (!cancelled) setError(e.message); }).finally(() => { if (!cancelled) setLoading(false); });
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [open, profile, query, authRevision]);
+  }, [open, profile, query, authRevision, directoryReady]);
   return <div className="space-y-2">
     <Label>{label}（{ids.length}）</Label>
     <div className="rounded-md border divide-y">{!ids.length && <p className="p-3 text-xs text-muted-foreground">尚未添加</p>}
@@ -967,11 +969,11 @@ function AccessList({ profile, label, ids, onAdd, onRemove }: {
     </div>
     <Button variant="outline" onClick={() => setOpen(!open)}>搜索并选择人员</Button>
     {open && <div className="rounded-md border p-3 space-y-2">
-      <DirectoryAuthorization profile={profile} onConnected={() => setAuthRevision(n => n + 1)} />
-      <Input aria-label={label + '搜索'} placeholder="输入姓名或邮箱；留空显示聊过的人" value={query} maxLength={50} onChange={e => setQuery(e.target.value)} />
+      <DirectoryAuthorization profile={profile} onConnected={ready => { setDirectoryReady(ready); if (ready) setAuthRevision(n => n + 1); }} />
+      <Input disabled={!directoryReady} aria-label={label + '搜索'} placeholder="输入姓名或邮箱；留空显示聊过的人" value={query} maxLength={50} onChange={e => setQuery(e.target.value)} />
       {loading && <p className="text-xs">搜索中…</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}。可在下方连接账号或补充授权。</p>}
-      {!error && !loading && !users.length && <p className="text-xs">当前授权范围内没有匹配的人。</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}。如需补充授权，请前往顶部“飞书连接”。</p>}
+      {directoryReady && !error && !loading && !users.length && <p className="text-xs">当前授权范围内没有匹配的人。</p>}
       <div className="max-h-64 overflow-auto">{users.map(u => <Button className="w-full justify-start" key={u.id} variant="ghost" disabled={ids.includes(u.id)} onClick={() => { setNames(n => ({ ...n, [u.id]: u.name })); onAdd(u.id); }}>{u.name} {u.department} {u.external ? '· 外部人员' : ''} {ids.includes(u.id) ? '· 已添加' : ''}</Button>)}</div>
       {more && <p className="text-xs">结果较多，请输入更完整的姓名缩小范围。</p>}
     </div>}
