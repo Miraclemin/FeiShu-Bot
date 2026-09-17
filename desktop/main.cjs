@@ -34,6 +34,12 @@ else {
       if (new URL(url).origin !== origin) { event.preventDefault(); if (url.startsWith('https://')) void shell.openExternal(url); }
     });
     window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+    ipcMain.handle('workbench:copy-text', (event, text) => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
+      if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > 1024 * 1024) throw new Error('Invalid clipboard text');
+      clipboard.writeText(text);
+      return true;
+    });
     ipcMain.handle('workbench:copy-query-permissions', (event) => {
       if (event.sender !== window.webContents || new URL(event.senderFrame.url).origin !== origin) throw new Error('Unauthorized');
       clipboard.writeText(JSON.stringify({ scopes: { tenant: [], user: ['contact:user:search', 'im:chat:read'] } }, null, 2));
