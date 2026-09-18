@@ -24,6 +24,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
   const [deleteTarget, setDeleteTarget] = useState<ProfileInfo | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [shuffling, setShuffling] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = () =>
@@ -36,6 +37,16 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, []);
+
+  async function shuffleAvatars() {
+    setShuffling(true);
+    try {
+      await apiPost('/api/profiles/avatars/shuffle', {});
+      await load();
+      toast.success('已换成一批不同的新头像');
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setShuffling(false); }
+  }
 
   async function start(name: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -88,7 +99,10 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
           <h1 className="text-2xl font-semibold">我的 Agent</h1>
           <p className="text-sm text-muted-foreground">让你的本机 AI 在飞书群里工作</p>
         </div>
-        <Button onClick={() => setCreating(true)}>新建 Agent</Button>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <Button variant="outline" disabled={shuffling || !profiles?.length} onClick={() => void shuffleAvatars()}>{shuffling ? '更换中…' : '头像换一批'}</Button>
+          <Button onClick={() => setCreating(true)}>新建 Agent</Button>
+        </div>
       </div>
       {error && <p className="text-destructive text-sm">加载失败：{error}</p>}
 

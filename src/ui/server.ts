@@ -1,3 +1,9 @@
+import { shuffleProfileAvatars } from './fleet';
+import { readdir } from 'node:fs/promises';
+import { join, basename } from 'node:path';
+import { readTasks, taskFile, activeTask, mutateTasks, touchTask } from '../team/task-store';
+import { resolveAppPaths } from '../config/app-paths';
+import { createTeam, prepareTeamHandbook } from './create-team';
 import { previewRepository, installTeamSkill, installedTeamSkills } from './team-skills';
 import { permissionStatus } from './permission-status';
 import { permissionDraft } from './permission-draft';
@@ -181,6 +187,46 @@ async function route(
     if (!profile) throw new HttpError(400, '缺少 Agent');
     sendJson(res, 200, await permissionDraft(profile, deps.rootDir, p ? await readJsonBody(req) : undefined)); return;
   }
+  if (path === '/api/workbench/create-team' && p) {
+    const profile=url.searchParams.get('profile'); if(!profile) throw new HttpError(400,'缺少组织者');
+    sendJson(res,200,await createTeam(sup,profile,await readJsonBody(req),deps.rootDir)); return;
+  }
+  if (path === '/api/workbench/coordinator-handbook' && p) {
+    const profile=url.searchParams.get('profile');
+    if(!profile) throw new HttpError(400,'缺少 Agent');
+    const body=await readJsonBody(req) as {chatId?:string};
+    sendJson(res,200,await prepareTeamHandbook(sup,profile,body.chatId ?? '',deps.rootDir)); return;
+  }
+  if (path === '/api/workbench/tasks' && (g || p)) {
+    const profile = url.searchParams.get('profile');
+    const chatId = url.searchParams.get('chatId') ?? '';
+    if (!profile) throw new HttpError(400, '缺少 Agent');
+    const app = await getWorkbench(profile, deps.rootDir);
+    if (!app.workbench.groups[chatId]) throw new HttpError(400, '群未绑定');
+    const root = resolveAppPaths({rootDir:deps.rootDir}).rootDir;
+    let file = taskFile(root, profile, chatId);
+    if (p) {
+      const body = await readJsonBody(req) as { action?: string; id?: string; storageKey?: string };
+      if (body.storageKey) {
+        if (!/^[a-f0-9]{64}\.json$/.test(body.storageKey)) throw new HttpError(400, '无效任务记录');
+        file = join(root,'team-tasks',body.storageKey);
+        const stored = await readTasks(file);
+        if (stored.context?.profile !== profile || stored.context.chatId !== chatId) throw new HttpError(403,'任务不属于当前群');
+      }
+      if (body.action !== 'cancel') throw new HttpError(400, '不支持的任务操作');
+      await mutateTasks(file, l => {
+        const t = activeTask(l);
+        if (!t || t.id !== body.id) throw new HttpError(409, '任务状态已改变，请刷新');
+        t.state = 'cancelled'; t.note = '已取消协调；已派出的执行任务可能仍在运行。'; touchTask(t);
+      });
+    }
+    const names = await readdir(join(root,'team-tasks')).catch((e:NodeJS.ErrnoException) => { if(e.code==='ENOENT') return []; throw e; });
+    const records = await Promise.all(names.filter(n=>/^[a-f0-9]{64}\.json$/.test(n)).map(async n=>({key:n,ledger:await readTasks(join(root,'team-tasks',n))})));
+    const tasks = records.filter(r=>(r.ledger.context?.profile===profile && r.ledger.context.chatId===chatId) || r.key===basename(taskFile(root,profile,chatId)))
+      .flatMap(r=>r.ledger.tasks.map(t=>({...t,storageKey:r.key,threadId:r.ledger.context?.threadId})))
+      .sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,30);
+    sendJson(res, 200, { tasks }); return;
+  }
   if (path === '/api/workbench') {
     const profile = url.searchParams.get('profile');
     if (!profile) throw new HttpError(400, '缺少 Agent');
@@ -196,6 +242,12 @@ async function route(
   // --- profiles ---
   if (path === '/api/profiles' && g) {
     sendJson(res, 200, { profiles: await listProfiles(sup, deps.rootDir) });
+    return;
+  }
+  if (path === '/api/profiles/avatars/shuffle' && p) {
+    const body = await readJsonBody(req) as { profile?: unknown };
+    if (body.profile !== undefined && (typeof body.profile !== 'string' || !body.profile)) throw new HttpError(400, 'profile is invalid');
+    sendJson(res, 200, await shuffleProfileAvatars(body.profile as string | undefined, deps.rootDir));
     return;
   }
   if (path === '/api/profiles/avatar' && p) {

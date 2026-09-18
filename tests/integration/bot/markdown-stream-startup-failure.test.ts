@@ -1,3 +1,4 @@
+import { readTasks, taskFile, activeTask } from '../../../src/team/task-store';
 import type { NormalizedMessage } from '@larksuite/channel';
 import { realpath } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -108,10 +109,10 @@ describe('markdown stream startup failures', () => {
     });
     await startTestBridge(h);
 
-    await h.channel.handlers.message?.(message('om_first', 'first'));
+    await h.channel.handlers.message?.(message('om_reaction_first', 'first'));
     await waitFor(() => h.agent.runOptions.length === 1);
 
-    await h.channel.handlers.message?.(message('om_second', 'second'));
+    await h.channel.handlers.message?.(message('om_reaction_second', 'second'));
     await waitFor(() => h.agent.runOptions.length === 2, 1000);
 
     expect(lastMarkdown(h.channel)).toContain('agent 失败');
@@ -151,14 +152,14 @@ describe('markdown stream startup failures', () => {
     const fail = vi.spyOn(log, 'fail').mockImplementation(() => {});
     await startTestBridge(h);
 
-    await h.channel.handlers.message?.(message('om_first', 'first'));
+    await h.channel.handlers.message?.(message('om_late_first', 'first'));
     await waitFor(() => streamProducerStarted);
     await waitFor(
       () => h.channel.rawClient.im.v1.messageReaction.delete.mock.calls.length > 0,
       4500,
     );
 
-    await h.channel.handlers.message?.(message('om_second', 'second'));
+    await h.channel.handlers.message?.(message('om_late_second', 'second'));
     await waitFor(() => h.agent.runOptions.length === 2);
 
     streamFailure.reject(new Error('late stream failed'));
@@ -426,6 +427,88 @@ describe('markdown stream startup failures', () => {
     expect(finalJson).toContain('FINAL_SENTINEL');
     expect(finalJson).not.toContain('progress update');
     expect(h.channel.sent[0]?.options).toMatchObject({ replyTo: 'om_card_final' });
+  });
+});
+
+describe('managed team tasks through channel intake', () => {
+  it('dispatches and joins results without model calls for ACKs, then archives and accepts a new task', async () => {
+    const final = (a:unknown):AgentEvent[] => [{type:'final_text',content:'```team-action\n'+JSON.stringify(a)+'\n```'},{type:'done',terminationReason:'normal'}];
+    const h=await createHarness({events:[final({action:'dispatch',summary:'分工',assignments:[{recipient:'ou_dev',name:'研发',instruction:'只读评审'},{recipient:'ou_test',name:'测试',instruction:'独立验收设计'}]}),final({action:'finish',summary:'评审已完成，暂不实施'}),final({action:'finish',summary:'第二个任务已完成',directAnswer:{kind:'consultation',reason:'解释协作概念'}})]});
+    h.controls.configPath=join(h.tmp.profile,'config.json');
+    h.profileConfig.workbench={revision:0,protectDocuments:true,groups:{oc_team:{enabled:true,name:'team',workspace:h.tmp.workspace,persona:'',documents:[],skills:[],role:'coordinator'}}};
+    let documentsCreated=0;
+    h.channel.rawClient.request.mockImplementation(async(p:{url:string})=>{
+      if(p.url==='/open-apis/docx/v1/documents') return {code:0,data:{document:{document_id:`doc${++documentsCreated}`}}};
+      if(p.url.includes('/docx/') || p.url.includes('/permissions/')) return {code:0,data:{content:''}};
+      return {code:0,data:{bots:[{member_id:'ou_dev',name:'研发'},{member_id:'ou_test',name:'测试'}],users:[]}};
+    });
+    await startTestBridge(h);
+    const msg=(id:string,content:string,sender='ou_user')=>({...message(id,content),chatId:'oc_team',chatType:'group',mentionedBot:true,createTime:Date.now(),senderId:sender,senderType:sender==='ou_user'?'user':'bot',senderIsBot:sender!=='ou_user'} as NormalizedMessage);
+    await h.channel.handlers.message?.(msg('om_team_start','组织协作：只读评审'));
+    await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('等待回执')));
+    const file=taskFile(h.tmp.profile,'codex','oc_team'); const task=activeTask(await readTasks(file))!;
+    expect(task.steps).toHaveLength(2);expect(h.agent.runOptions).toHaveLength(1);
+    await h.channel.handlers.message?.(msg('om_team_ack','已接单 '+task.id,'ou_dev'));
+    await h.channel.handlers.message?.(msg('om_team_dev',`[协作回执 ${task.id} S1 完成] 研发证据`,'ou_dev'));
+    expect(h.agent.runOptions).toHaveLength(1);
+    await h.channel.handlers.message?.(msg('om_team_test',`[协作回执 ${task.id} S2 完成] 测试证据`,'ou_test'));
+    await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('评审已完成，暂不实施')));
+    expect(h.agent.runOptions).toHaveLength(2);
+    expect(h.agent.runOptions[1]!.prompt).toContain('研发证据');expect(h.agent.runOptions[1]!.prompt).toContain('测试证据');
+    await vi.waitFor(async()=>expect(activeTask(await readTasks(file))).toBeUndefined());
+    await h.channel.handlers.message?.(msg('om_team_new','组织协作：解释协作概念'));
+    await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('第二个任务已完成')));
+    expect(JSON.stringify(h.channel.sent)).not.toContain('team-action');
+    expect(documentsCreated).toBe(2);
+    expect(h.agent.runOptions[2]!.prompt).not.toContain('研发证据');
+  });
+  it('returns a tracked executor result with correlation and a real mention',async()=>{
+    const h=await createHarness({events:[{type:'final_text',content:'完成：只读证据'},{type:'done',terminationReason:'normal'}]});
+    h.controls.configPath=join(h.tmp.profile,'config.json');
+    h.profileConfig.workbench={revision:0,protectDocuments:true,groups:{oc_team:{enabled:true,name:'team',workspace:h.tmp.workspace,persona:'',documents:[],skills:[],role:'developer'}}};
+    await startTestBridge(h);
+    await h.channel.handlers.message?.({...message('om_assigned','[协作派单 TEAM-12345678 S1] 只读任务'),chatId:'oc_team',chatType:'group',mentionedBot:true,senderId:'ou_org',senderType:'bot',senderIsBot:true,createTime:Date.now()} as NormalizedMessage);
+    await waitFor(()=>h.channel.sent.length>0);
+    expect(lastMarkdown(h.channel)).toContain('[协作回执 TEAM-12345678 S1 完成]');
+    expect(h.channel.sent[0]!.options).toMatchObject({mentions:[{openId:'ou_org'}]});
+  });
+});
+
+describe('already delivered final replies', () => {
+  for (const messageReply of ['text', 'markdown', 'card'] as const) {
+    it(`suppresses a verified direct final report in ${messageReply} mode`, async () => {
+      const h = await createHarness({ messageReply, events: [
+        { type: 'text', delta: 'progress update' },
+        { type: 'final_text', content: JSON.stringify({ bridge_delivery: { message_id: 'om_delivered', fallback_text: 'final report' } }) },
+        { type: 'done', terminationReason: 'normal' },
+      ] });
+      h.channel.rawClient.request.mockImplementation(async (p: { url: string }) => {
+        if (p.url.endsWith('/om_delivered')) return { code: 0, data: { items: [{
+          message_id: 'om_delivered', chat_id: 'oc_dm', create_time: String(Date.now()), deleted: false,
+          sender: { id: 'cli_test', id_type: 'app_id', sender_type: 'app' },
+        }] } };
+        return { code: 0, data: {} };
+      });
+      const logSpy = vi.spyOn(log, 'info');
+      await startTestBridge(h);
+      await h.channel.handlers.message?.(message(`om_receipt_${messageReply}`, 'run'));
+      await waitFor(() => logSpy.mock.calls.some(c => c[1] === 'skip-already-delivered'));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      expect(logSpy.mock.calls.some(c => c[1] === 'skip-already-delivered')).toBe(true);
+      expect(h.channel.sent).toHaveLength(0);
+    });
+  }
+
+  it('delivers the full fallback when the receipt cannot be verified', async () => {
+    const h = await createHarness({ messageReply: 'text', events: [
+      { type: 'final_text', content: JSON.stringify({ bridge_delivery: { message_id: 'om_failed', fallback_text: 'actual final report' } }) },
+      { type: 'done', terminationReason: 'normal' },
+    ] });
+    await startTestBridge(h);
+    await h.channel.handlers.message?.(message('om_receipt_fallback', 'run'));
+    await waitFor(() => h.channel.sent.length === 1);
+    expect(lastMarkdown(h.channel)).toBe('actual final report');
+    expect(JSON.stringify(h.channel.sent)).not.toContain('bridge_delivery');
   });
 });
 

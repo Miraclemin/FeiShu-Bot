@@ -1,3 +1,4 @@
+import { handleTeamReview } from './team-review';
 import { workbenchInfo } from './workbench-info';
 import { handleProject, readProject, projectCardText } from '../team/project-bindings';
 import { randomUUID } from 'node:crypto';
@@ -177,6 +178,7 @@ const handlers: Record<string, Handler> = {
   '/ws': handleWs,
   '/resume': handleResume,
   '/status': handleStatus,
+  '/review': handleTeamReview,
   '/project': handleTeamProject,
   '/help': handleHelp,
   '/usage': handleHelp,

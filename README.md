@@ -486,3 +486,12 @@ Feishu Collaborator 基于 [Miraclemin/lark-team-agent-bridge](https://github.co
 - 首页“团队资源”支持读取 Git HTTPS 仓库，预览并安装每个包含 `SKILL.md` 的目录，再到群设置勾选启用。私有仓库需本机已配置 Git HTTPS 登录。
 - 同名且全部文件内容一致的本机 Skill 会直接复用，不重复安装；内容不同的版本独立保留。安装不会执行技能脚本。
 - 目前不包含自动订阅新增资料、上传本地 Skill 到 Git 或跨机器自动派活。
+
+
+## 自动协调与任务文档（Preview 5）
+
+在群设置中启用组织者模式并填写各 Agent 职责。直接 @组织者提出目标，软件登记任务、创建独立飞书文档并协调执行。任务文档同步分工、回执、阻塞和通过 @提交的人工反馈；人协调时仍可沿用业务表格。
+
+常用命令：`/team start 目标`、`/team status`、`/team resume`、`/team resolve S编号 人工核对结论`、`/team cancel`、`/team help`。取消仅停止后续协调，保留记录，不强停执行者；新任务使用新编号和新文档。
+
+详见 [组织者模式](docs/coordinator-mode.md)。任务文档需飞书文档及分享权限，文档同步的真实飞书端到端验收尚待完成。

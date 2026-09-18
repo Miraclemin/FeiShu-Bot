@@ -26,6 +26,7 @@ export interface BotInfo {
 export interface ProfileInfo {
   needsSetup?: boolean;
   avatarId?: string;
+  avatarLocked?: boolean;
   displayName?: string;
   name: string;
   agentKind: AgentKind;

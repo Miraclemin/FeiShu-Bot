@@ -20,3 +20,12 @@ it('checks the published version instead of unapplied draft scopes',async()=>{
  expect(version).toHaveBeenCalledWith(expect.objectContaining({path:{app_id:'cli_test',version_id:'published'}}));
  expect(result).toMatchObject({status:'checked',permissions:'missing',meeting:'missing'});
 });
+
+it('requires member lookup on the bot identity in the unified permission setup',()=>{
+ const messaging=presets.find(p=>p.id==='messaging')!;
+ expect(messaging.default).toBe(true);
+ expect(messaging.tenant).toContain('im:chat.members:read');
+ const scopes=presets.flatMap(p=>[...p.tenant.filter(scope=>scope!=='im:chat.members:read').map(scope=>({scope,token_types:['tenant']})),...p.user.map(scope=>({scope,token_types:['user']}))]);
+ scopes.push({scope:'im:chat.members:read',token_types:['user']});
+ expect(summarizePermissions(scopes,[]).missing).toContainEqual({scope:'im:chat.members:read',type:'tenant'});
+});

@@ -189,6 +189,7 @@ export function helpCard(agentName = 'Agent', groupSkills?: string, workbenchInf
     divMd(
       [
         '**命令列表**',
+        '`/team` — 组织者任务：开始、状态、继续、取消（组织者模式开启时）',
         '',
         '- `/new` `/reset` — 清空当前 chat 的会话',
         '- `/new chat [name]` — 新建群+新会话，自动拉你进群',

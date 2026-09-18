@@ -1,6 +1,11 @@
+import { handbookToken } from '../bot/coordinator-handbook';
 import { isAbsolute } from 'node:path';
 export interface GroupWorkspace {
   resources?: string[];
+  /** Shared Feishu document, independently bound per group. */
+  experienceDoc?: string;
+  coordinatorDoc?: string;
+  coordinationEnabled?: boolean;
   role?: string;
   rolePrompt?: string;
   project?: { name: string; url: string; requirements: string; bugs: string };
@@ -40,13 +45,24 @@ export function normalizeWorkbench(value: unknown): WorkbenchConfig | undefined 
     const role = String(g.role ?? '').trim() || undefined;
     const rolePrompt = String(g.rolePrompt ?? '').trim();
     if ((role?.length ?? 0) > 80 || rolePrompt.length > 8000) throw new Error('角色名称最多 80 字，职责最多 8000 字');
+    const coordinatorDoc = String(g.coordinatorDoc ?? '').trim();
+    if (coordinatorDoc) handbookToken(coordinatorDoc);
+    const experienceDoc = String(g.experienceDoc ?? '').trim();
+    if (experienceDoc) {
+      const u = new URL(experienceDoc);
+      if (u.protocol !== 'https:' || u.username || u.password ||
+          !/(^|\.)(feishu\.cn|larksuite\.com)$/.test(u.hostname) ||
+          !/^\/(docx|wiki)\/[a-zA-Z0-9]+\/?$/.test(u.pathname)) {
+        throw new Error('项目经验请填写飞书文档或知识库页面 HTTPS 链接');
+      }
+    }
     const pr = (g.project ?? {}) as Record<string, unknown>;
     const project = { name: String(pr.name ?? '').slice(0,200), url: String(pr.url ?? ''), requirements: String(pr.requirements ?? ''), bugs: String(pr.bugs ?? '') };
     for (const key of ['url','requirements','bugs'] as const) if (project[key]) { const u = new URL(project[key]); if (u.protocol !== 'https:' || u.username || u.password) throw new Error('Use HTTPS project links without credentials'); }
     const resources = [...new Set((Array.isArray(g.resources) ? g.resources.map(String) : [project.requirements, project.bugs].filter(Boolean)))];
     if (resources.length > 300) throw new Error('最多添加 300 份资料');
     for (const link of resources) { const u = new URL(link); if(u.protocol !== 'https:' || u.username || u.password || !/(^|\.)(feishu\.cn|larksuite\.com)$/.test(u.hostname)) throw new Error('请填写飞书资料 HTTPS 链接'); }
-    groups[id] = { resources, role, rolePrompt, project, skillIsolation: g.skillIsolation === 'strict' ? 'strict' : 'catalog', enabled: g.enabled === true, name: String(g.name ?? '').slice(0, 150),
+    groups[id] = { coordinationEnabled: g.coordinationEnabled !== false, ...(coordinatorDoc ? { coordinatorDoc } : {}), ...(experienceDoc ? { experienceDoc } : {}), resources, role, rolePrompt, project, skillIsolation: g.skillIsolation === 'strict' ? 'strict' : 'catalog', enabled: g.enabled === true, name: String(g.name ?? '').slice(0, 150),
       workspace, persona: String(g.persona ?? '').slice(0, 8000), documents: [...new Set(documents)], skills: [...new Set(skills)] };
   }
   return { revision: Number.isSafeInteger(raw.revision) ? Number(raw.revision) : 0, protectDocuments: true, groups };

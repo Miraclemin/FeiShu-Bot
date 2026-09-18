@@ -126,7 +126,7 @@ describe('summarizeEndedMeeting', () => {
     const d = deps(cfg({ summaryOnEnd: true }), 'oc_team');
     await summarizeEndedMeeting(d.args);
 
-    expect(mocks.startRunFlow).toHaveBeenCalledTimes(1);
+    expect(mocks.startRunFlow).toHaveBeenCalledTimes(2);
     expect(d.sent).toHaveLength(1);
     expect(d.sent[0]?.to).toBe('oc_team');
     expect(String((d.sent[0]?.input as { markdown: string }).markdown)).toContain('会议纪要 · 周会');
@@ -179,7 +179,7 @@ describe('summarizeEndedMeeting', () => {
     } as never);
 
     expect(mocks.startRunFlow).not.toHaveBeenCalled();
-    expect(sent).toHaveLength(0);
+    expect(sent).toHaveLength(1);
   });
 
   it('still works after the meeting ended (transcript survives markEnded)', async () => {
@@ -257,4 +257,65 @@ describe('workbench meeting participation', () => {
       access: { ok: true, reason: 'allowed-chat' },
     }));
   });
+});
+
+
+describe('whole meeting coverage', () => {
+  it('uses the opening after 300 later sentences in both answers and summaries', async () => {
+    const d = deps(cfg({ summaryOnEnd: true }), 'oc_team');
+    for (let i = 2; i <= 301; i++) d.session.ingest({
+      event_id: `long-${i}`, activity_event_type: 'transcript_received',
+      transcript_received_items: [{ sentence_id: i, text: `后续内容${i}`, speaker: { name: '乙' } }],
+    });
+    expect(d.session.recentTranscript()).toHaveLength(200);
+    await answerInMeeting(d.args, '开头说了什么', { deliver: 'caller' });
+    expect(mocks.startRunFlow.mock.calls[0]?.[0].prompt).toContain('讨论了发布计划');
+    mocks.startRunFlow.mockClear();
+    await summarizeEndedMeeting(d.args);
+    const prompt = mocks.startRunFlow.mock.calls[0]?.[0].prompt;
+    expect(prompt).toContain('讨论了发布计划');
+    expect(prompt).toContain('后续内容301');
+  });
+  it('does not send execution errors as a successful summary', async () => {
+    const d = deps(cfg({ summaryOnEnd: true }), 'oc_team');
+    mocks.startRunFlow.mockResolvedValue({ ok: false, rejectReason: { code: 'run-already-active', userVisible: 'busy' } });
+    await summarizeEndedMeeting(d.args);
+    expect(JSON.stringify(d.sent)).not.toContain('会议纪要 ·');
+    expect(JSON.stringify(d.sent)).toContain('失败');
+  });
+});
+
+
+it('summarizes every segment of a long meeting before combining them', async () => {
+  const d = deps(cfg({ summaryOnEnd: true }), 'oc_team');
+  d.session.ingest({ event_id: 'huge', activity_event_type: 'transcript_received',
+    transcript_received_items: [{ sentence_id: 'huge', text: '开场标记' + '会议内容'.repeat(14000) + '结束标记' }] });
+  await summarizeEndedMeeting(d.args);
+  const prompts = mocks.startRunFlow.mock.calls.map(c => c[0].prompt as string);
+  expect(prompts.length).toBeGreaterThan(3);
+  expect(prompts.slice(0, -1).join('')).toContain('开场标记');
+  expect(prompts.slice(0, -1).join('')).toContain('结束标记');
+  expect(prompts.every(p => p.length < 25000)).toBe(true);
+  expect(d.sent).toHaveLength(1);
+});
+
+
+it('honours the saved auto-summary switch when running controls are stale', async () => {
+  const store = await import('../../../src/config/profile-store');
+  const d = deps(cfg({ summaryOnEnd: false }), 'oc_team');
+  const args = d.args as unknown as import('../../../src/meeting/orchestrator').MeetingAgentDeps;
+  args.controls.configPath = '/test/config.json';
+  const spy = vi.spyOn(store, 'loadRootConfig').mockResolvedValue({
+    profiles: { claude: profileConfig(cfg({ summaryOnEnd: true })) },
+  } as never);
+  try {
+    await summarizeEndedMeeting(args);
+    expect(d.sent).toHaveLength(1);
+    expect(JSON.stringify(d.sent)).toContain('会议纪要 ·');
+    spy.mockResolvedValue({ profiles: { claude: profileConfig(cfg({ summaryOnEnd: false })) } } as never);
+    d.sent.length = 0;
+    args.controls.profileConfig.meeting.summaryOnEnd = true;
+    await summarizeEndedMeeting(args);
+    expect(d.sent).toHaveLength(0);
+  } finally { spy.mockRestore(); }
 });

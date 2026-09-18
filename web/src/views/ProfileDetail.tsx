@@ -87,7 +87,10 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
   async function saveAvatar(avatarId: string) {
     setAvatarSaving(true);
     try {
-      await apiPost('/api/profiles/avatar', { profile, avatarId });
+      if (avatarId === 'random') {
+        const result = await apiPost<{ avatars: Record<string, string> }>('/api/profiles/avatars/shuffle', { profile });
+        avatarId = result.avatars[profile]!;
+      } else await apiPost('/api/profiles/avatar', { profile, avatarId });
       setInfo(current => current ? { ...current, avatarId } : current);
       setAvatarOpen(false); toast.success('头像已更新');
     } catch (e) { toast.error((e as Error).message); }
@@ -102,7 +105,7 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回">
           <ArrowLeft />
         </Button>
-        <button aria-label="更换 Agent 头像" title="更换头像" className="shrink-0 rounded-2xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setAvatarOpen(true)}><AgentAvatar profile={profile} avatarId={info?.avatarId} className="size-14" /></button>
+        <button aria-label={info?.avatarLocked ? "更换组织者人物头像" : "更换 Agent 头像"} title="更换头像" className="shrink-0 rounded-2xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setAvatarOpen(true)}><AgentAvatar profile={profile} avatarId={info?.avatarId} className="size-14" /></button>
         <div className="flex min-w-0 items-center gap-2">
           {editing ? <form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); void saveName(); }}>
             <Input aria-label="Agent 名称" autoFocus maxLength={80} value={draftName} disabled={renaming} onChange={e => setDraftName(e.target.value)} />
@@ -126,9 +129,10 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
       <Dialog open={avatarOpen} onOpenChange={open => { if (!avatarSaving) setAvatarOpen(open); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>给 Agent 换个头像</DialogTitle>
-            <DialogDescription>选一个你喜欢的小搭档，仅更改本软件中的头像。</DialogDescription></DialogHeader>
-          <div className="grid grid-cols-3 gap-3">
-            {mascotOptions.map(item => <button key={item.id} disabled={avatarSaving}
+            <DialogDescription>{info?.avatarLocked ? "12 位农场家人，选择后固定保存，头像换一批不会更换组织者。" : "30 种小动物和 12 位农场家人，挑选喜欢的角色。保存后保持不变。"}仅更改本软件中的头像。</DialogDescription></DialogHeader>
+          {!info?.avatarLocked && <Button variant="outline" disabled={avatarSaving} onClick={() => void saveAvatar('random')}>随机换一个</Button>}
+          <div className="grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto p-1 sm:grid-cols-6">
+            {mascotOptions.filter(item => !item.fixed && (!info?.avatarLocked || item.humanAtlas)).map(item => <button key={item.id} disabled={avatarSaving}
               aria-label={item.label} aria-pressed={(info?.avatarId ?? defaultAvatarId(profile)) === item.id}
               className="rounded-2xl border-2 border-transparent p-2 text-center transition-colors hover:bg-accent aria-pressed:border-primary disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary"
               onClick={() => void saveAvatar(item.id)}>

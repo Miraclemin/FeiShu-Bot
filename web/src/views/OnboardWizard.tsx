@@ -37,6 +37,8 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
   const [qr, setQr] = useState<{ sessionId: string; qrUrl: string; expireIn: number } | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
 
+  const onCreatedRef = useRef(onCreated);
+  useEffect(() => { onCreatedRef.current = onCreated; }, [onCreated]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const scanned = useRef(false);
   const generation = useRef(0);
@@ -105,7 +107,7 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
       scanned.current = true;
       stopPolling();
       toast.success(`机器人「${s.profile}」已保存，请继续配置`);
-      onCreated(s.profile);
+      onCreatedRef.current(s.profile);
       return;
     }
     if (s.status === "scanned" && !scanned.current) {
@@ -132,7 +134,7 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
         profile: profileName.trim(),
       });
       toast.success(`profile「${r.profile}」已创建`);
-      onCreated(r.profile);
+      onCreatedRef.current(r.profile);
     } catch (e) {
       setPhase("confirm"); // let the user fix the name / retry
       toast.error(String((e as Error).message ?? e));
@@ -236,8 +238,8 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
 }
 
 
-export function OnboardWizard({onCreated}:{onCreated:(profile:string)=>void}) {
- const [mode,setMode]=useState<'existing'|'new'|'manual'>('existing');
+export function OnboardWizard({onCreated,defaultMode='existing'}:{onCreated:(profile:string)=>void;defaultMode?:'existing'|'new'}) {
+ const [mode,setMode]=useState<'existing'|'new'|'manual'>(defaultMode);
  return <div className="space-y-4"><div className="flex gap-2" role="tablist" aria-label="添加方式">
  <Button role="tab" aria-selected={mode==='existing'} variant={mode==='existing'?'default':'outline'} onClick={()=>setMode('existing')}>绑定已有应用</Button>
  <Button role="tab" aria-selected={mode==='new'} variant={mode==='new'?'default':'outline'} onClick={()=>setMode('new')}>扫码新建应用</Button></div>

@@ -10,7 +10,7 @@ const thumbnails = join(root, 'web/src/assets/mascots');
 await mkdir(iconset, { recursive: true });
 await mkdir(thumbnails, { recursive: true });
 const resize = (source, size, destination) => execFileSync('sips', ['-z', String(size), String(size), source, '--out', destination], { stdio: 'ignore' });
-for (const item of catalog) resize(join(root, 'resources/mascots', item.id + '.png'), 256, join(thumbnails, item.id + '.png'));
+for (const item of catalog.filter(item => !item.atlas && !item.fixed && !item.humanAtlas)) resize(join(root, 'resources/mascots', item.id + '.png'), 256, join(thumbnails, item.id + '.png'));
 const source = join(branding, 'icon.png');
 execFileSync('swift', [join(root, 'tools/mask-macos-icon.swift'), join(root, 'resources/mascots/owl-c1.png'), source], { stdio: 'inherit' });
 for (const size of [16, 32, 128, 256, 512]) {

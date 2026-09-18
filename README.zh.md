@@ -6,3 +6,12 @@
 - [安装与首次使用](docs/GETTING-STARTED.zh.md)
 - [工作台详细说明](docs/WORKBENCH.md)
 - [上游中文文档](docs/UPSTREAM-README.zh.md)
+
+
+## 自动协调与任务文档（Preview 5）
+
+在群设置中启用组织者模式并填写各 Agent 职责。直接 @组织者提出目标，软件登记任务、创建独立飞书文档并协调执行。任务文档同步分工、回执、阻塞和通过 @提交的人工反馈；人协调时仍可沿用业务表格。
+
+常用命令：`/team start 目标`、`/team status`、`/team resume`、`/team resolve S编号 人工核对结论`、`/team cancel`、`/team help`。取消仅停止后续协调，保留记录，不强停执行者；新任务使用新编号和新文档。
+
+详见 [组织者模式](docs/coordinator-mode.md)。任务文档需飞书文档及分享权限，文档同步的真实飞书端到端验收尚待完成。

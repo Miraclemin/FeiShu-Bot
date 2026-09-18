@@ -1,8 +1,499 @@
 [
-  {"id":"dog-a1","label":"小狗 · 陪伴","corner":"lower-left"},
-  {"id":"dog-a2","label":"小狗 · 守候","corner":"lower-right"},
-  {"id":"otter-b1","label":"水獭 · 动手","corner":"lower-left"},
-  {"id":"otter-b2","label":"水獭 · 协作","corner":"lower-right"},
-  {"id":"owl-c1","label":"猫头鹰 · 观察","corner":"lower-left"},
-  {"id":"owl-c2","label":"猫头鹰 · 洞察","corner":"lower-right"}
+  {
+    "id": "dog-a1",
+    "label": "小狗 · 陪伴",
+    "corner": "lower-left"
+  },
+  {
+    "id": "dog-a2",
+    "label": "小狗 · 守候",
+    "corner": "lower-right"
+  },
+  {
+    "id": "otter-b1",
+    "label": "水獭 · 动手",
+    "corner": "lower-left"
+  },
+  {
+    "id": "otter-b2",
+    "label": "水獭 · 协作",
+    "corner": "lower-right"
+  },
+  {
+    "id": "owl-c1",
+    "label": "猫头鹰 · 观察",
+    "corner": "lower-left"
+  },
+  {
+    "id": "owl-c2",
+    "label": "猫头鹰 · 洞察",
+    "corner": "lower-right"
+  },
+  {
+    "id": "friend-fox",
+    "label": "狐狸",
+    "atlas": true,
+    "column": 0,
+    "row": 0,
+    "x": 2,
+    "y": 2,
+    "width": 225,
+    "height": 225
+  },
+  {
+    "id": "friend-rabbit",
+    "label": "兔子",
+    "atlas": true,
+    "column": 1,
+    "row": 0,
+    "x": 231,
+    "y": 2,
+    "width": 225,
+    "height": 225
+  },
+  {
+    "id": "friend-panda",
+    "label": "熊猫",
+    "atlas": true,
+    "column": 2,
+    "row": 0,
+    "x": 460,
+    "y": 2,
+    "width": 225,
+    "height": 225
+  },
+  {
+    "id": "friend-cat",
+    "label": "橘猫",
+    "atlas": true,
+    "column": 3,
+    "row": 0,
+    "x": 689,
+    "y": 2,
+    "width": 225,
+    "height": 225
+  },
+  {
+    "id": "friend-corgi",
+    "label": "柯基",
+    "atlas": true,
+    "column": 4,
+    "row": 0,
+    "x": 918,
+    "y": 2,
+    "width": 225,
+    "height": 225
+  },
+  {
+    "id": "friend-frog",
+    "label": "青蛙",
+    "atlas": true,
+    "column": 5,
+    "row": 0,
+    "x": 1147,
+    "y": 2,
+    "width": 225,
+    "height": 225
+  },
+  {
+    "id": "friend-penguin",
+    "label": "企鹅",
+    "atlas": true,
+    "column": 0,
+    "row": 1,
+    "x": 2,
+    "y": 231,
+    "width": 225,
+    "height": 211
+  },
+  {
+    "id": "friend-koala",
+    "label": "考拉",
+    "atlas": true,
+    "column": 1,
+    "row": 1,
+    "x": 231,
+    "y": 231,
+    "width": 225,
+    "height": 211
+  },
+  {
+    "id": "friend-lion",
+    "label": "狮子",
+    "atlas": true,
+    "column": 2,
+    "row": 1,
+    "x": 460,
+    "y": 231,
+    "width": 225,
+    "height": 211
+  },
+  {
+    "id": "friend-elephant",
+    "label": "大象",
+    "atlas": true,
+    "column": 3,
+    "row": 1,
+    "x": 689,
+    "y": 231,
+    "width": 225,
+    "height": 211
+  },
+  {
+    "id": "friend-squirrel",
+    "label": "松鼠",
+    "atlas": true,
+    "column": 4,
+    "row": 1,
+    "x": 918,
+    "y": 231,
+    "width": 225,
+    "height": 211
+  },
+  {
+    "id": "friend-hedgehog",
+    "label": "刺猬",
+    "atlas": true,
+    "column": 5,
+    "row": 1,
+    "x": 1147,
+    "y": 231,
+    "width": 225,
+    "height": 211
+  },
+  {
+    "id": "friend-polar-bear",
+    "label": "北极熊",
+    "atlas": true,
+    "column": 0,
+    "row": 2,
+    "x": 2,
+    "y": 446,
+    "width": 225,
+    "height": 217
+  },
+  {
+    "id": "friend-raccoon",
+    "label": "浣熊",
+    "atlas": true,
+    "column": 1,
+    "row": 2,
+    "x": 231,
+    "y": 446,
+    "width": 225,
+    "height": 217
+  },
+  {
+    "id": "friend-tiger",
+    "label": "老虎",
+    "atlas": true,
+    "column": 2,
+    "row": 2,
+    "x": 460,
+    "y": 446,
+    "width": 225,
+    "height": 217
+  },
+  {
+    "id": "friend-deer",
+    "label": "小鹿",
+    "atlas": true,
+    "column": 3,
+    "row": 2,
+    "x": 689,
+    "y": 446,
+    "width": 225,
+    "height": 217
+  },
+  {
+    "id": "friend-pig",
+    "label": "小猪",
+    "atlas": true,
+    "column": 4,
+    "row": 2,
+    "x": 918,
+    "y": 446,
+    "width": 225,
+    "height": 217
+  },
+  {
+    "id": "friend-duck",
+    "label": "鸭子",
+    "atlas": true,
+    "column": 5,
+    "row": 2,
+    "x": 1147,
+    "y": 446,
+    "width": 225,
+    "height": 217
+  },
+  {
+    "id": "friend-seal",
+    "label": "海豹",
+    "atlas": true,
+    "column": 0,
+    "row": 3,
+    "x": 2,
+    "y": 667,
+    "width": 225,
+    "height": 219
+  },
+  {
+    "id": "friend-alpaca",
+    "label": "羊驼",
+    "atlas": true,
+    "column": 1,
+    "row": 3,
+    "x": 231,
+    "y": 667,
+    "width": 225,
+    "height": 219
+  },
+  {
+    "id": "friend-hamster",
+    "label": "仓鼠",
+    "atlas": true,
+    "column": 2,
+    "row": 3,
+    "x": 460,
+    "y": 667,
+    "width": 225,
+    "height": 219
+  },
+  {
+    "id": "friend-monkey",
+    "label": "猴子",
+    "atlas": true,
+    "column": 3,
+    "row": 3,
+    "x": 689,
+    "y": 667,
+    "width": 225,
+    "height": 219
+  },
+  {
+    "id": "friend-red-panda",
+    "label": "小熊猫",
+    "atlas": true,
+    "column": 4,
+    "row": 3,
+    "x": 918,
+    "y": 667,
+    "width": 225,
+    "height": 219
+  },
+  {
+    "id": "friend-whale",
+    "label": "鲸鱼",
+    "atlas": true,
+    "column": 5,
+    "row": 3,
+    "x": 1147,
+    "y": 667,
+    "width": 225,
+    "height": 219
+  },
+  {
+    "id": "friend-parrot",
+    "label": "鹦鹉",
+    "atlas": true,
+    "column": 0,
+    "row": 4,
+    "x": 2,
+    "y": 890,
+    "width": 225,
+    "height": 253
+  },
+  {
+    "id": "friend-turtle",
+    "label": "海龟",
+    "atlas": true,
+    "column": 1,
+    "row": 4,
+    "x": 231,
+    "y": 890,
+    "width": 225,
+    "height": 253
+  },
+  {
+    "id": "friend-giraffe",
+    "label": "长颈鹿",
+    "atlas": true,
+    "column": 2,
+    "row": 4,
+    "x": 460,
+    "y": 890,
+    "width": 225,
+    "height": 253
+  },
+  {
+    "id": "friend-sheep",
+    "label": "绵羊",
+    "atlas": true,
+    "column": 3,
+    "row": 4,
+    "x": 689,
+    "y": 890,
+    "width": 225,
+    "height": 253
+  },
+  {
+    "id": "friend-bat",
+    "label": "蝙蝠",
+    "atlas": true,
+    "column": 4,
+    "row": 4,
+    "x": 918,
+    "y": 890,
+    "width": 225,
+    "height": 253
+  },
+  {
+    "id": "friend-dragon",
+    "label": "小龙",
+    "atlas": true,
+    "column": 5,
+    "row": 4,
+    "x": 1147,
+    "y": 890,
+    "width": 225,
+    "height": 253
+  },
+  {
+    "id": "coordinator-human",
+    "label": "组织者 · 人物",
+    "fixed": true
+  },
+  {
+    "id": "farm-grandpa",
+    "label": "农场爷爷",
+    "humanAtlas": true,
+    "column": 0,
+    "row": 0,
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 361
+  },
+  {
+    "id": "farm-grandma",
+    "label": "农场奶奶",
+    "humanAtlas": true,
+    "column": 1,
+    "row": 0,
+    "x": 390,
+    "y": 0,
+    "width": 346,
+    "height": 361
+  },
+  {
+    "id": "farm-dad",
+    "label": "农场爸爸",
+    "humanAtlas": true,
+    "column": 2,
+    "row": 0,
+    "x": 736,
+    "y": 0,
+    "width": 374,
+    "height": 361
+  },
+  {
+    "id": "farm-mom",
+    "label": "农场妈妈",
+    "humanAtlas": true,
+    "column": 3,
+    "row": 0,
+    "x": 1110,
+    "y": 0,
+    "width": 338,
+    "height": 361
+  },
+  {
+    "id": "farm-gardener",
+    "label": "园丁姐姐",
+    "humanAtlas": true,
+    "column": 0,
+    "row": 1,
+    "x": 0,
+    "y": 365,
+    "width": 390,
+    "height": 342
+  },
+  {
+    "id": "farm-shepherd",
+    "label": "牧羊叔叔",
+    "humanAtlas": true,
+    "column": 1,
+    "row": 1,
+    "x": 390,
+    "y": 365,
+    "width": 346,
+    "height": 342
+  },
+  {
+    "id": "farm-beekeeper",
+    "label": "养蜂阿姨",
+    "humanAtlas": true,
+    "column": 2,
+    "row": 1,
+    "x": 736,
+    "y": 365,
+    "width": 374,
+    "height": 342
+  },
+  {
+    "id": "farm-orchard-farmer",
+    "label": "果园大叔",
+    "humanAtlas": true,
+    "column": 3,
+    "row": 1,
+    "x": 1110,
+    "y": 365,
+    "width": 338,
+    "height": 342
+  },
+  {
+    "id": "farm-elder-gardener",
+    "label": "园丁爷爷",
+    "humanAtlas": true,
+    "column": 0,
+    "row": 2,
+    "x": 0,
+    "y": 711,
+    "width": 390,
+    "height": 375
+  },
+  {
+    "id": "farm-baker",
+    "label": "烘焙奶奶",
+    "humanAtlas": true,
+    "column": 1,
+    "row": 2,
+    "x": 390,
+    "y": 711,
+    "width": 346,
+    "height": 375
+  },
+  {
+    "id": "farm-farmhand",
+    "label": "农场哥哥",
+    "humanAtlas": true,
+    "column": 2,
+    "row": 2,
+    "x": 736,
+    "y": 711,
+    "width": 374,
+    "height": 375
+  },
+  {
+    "id": "farm-rancher",
+    "label": "牧场姐姐",
+    "humanAtlas": true,
+    "column": 3,
+    "row": 2,
+    "x": 1110,
+    "y": 711,
+    "width": 338,
+    "height": 375
+  }
 ]

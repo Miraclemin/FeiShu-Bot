@@ -74,7 +74,7 @@ export async function updateWorkbench(sup: UiSupervisor, profile: string, body: 
       cfg.access.allowedChats = Object.entries(workbench.groups).filter(([, g]) => g.enabled).map(([id]) => id);
       cfg.mode = 'personal';
       cfg.larkCli.identityPreset = 'bot-only';
-      cfg.meeting.enabled = false; // no unauthenticated meeting dispatch in protected native mode
+      // Preserve the separately opted-in meeting settings when saving group settings.
       await saveRootConfig(root, paths.configFile);
     });
     if (wasOnline) {

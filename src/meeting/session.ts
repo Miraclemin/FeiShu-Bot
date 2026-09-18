@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { log } from '../core/logger';
 import type { MeetingConfig } from '../config/profile-schema';
@@ -71,6 +71,8 @@ export class MeetingSession {
   private readonly now: () => number;
 
   /** Rolling transcript kept structurally so a re-sent sentence replaces in place. */
+  private fullTranscript = new Map<string, { speaker: string; text: string }>();
+
   private transcript: { sentenceId: string; speaker: string; text: string }[] = [];
   /** sentence_id → latest text, so a re-sent sentence overwrites rather than appends. */
   private sentences = new Map<string, string>();
@@ -225,6 +227,7 @@ export class MeetingSession {
     if (event.selfEcho) return;
     if (this.sentences.get(event.sentenceId) === event.text) return; // exact repeat
     this.sentences.set(event.sentenceId, event.text);
+    this.fullTranscript.set(event.sentenceId, { speaker: event.speaker.name ?? event.speaker.id ?? '?', text: event.text });
     this.lastTranscriptAt = new Date(this.now()).toISOString();
     // Save every received revision before debounce so shutdown cannot lose it.
     this.archive(event);
@@ -269,6 +272,42 @@ export class MeetingSession {
   /** Await pending disk writes, including on orderly leave. */
   async flushTranscript(): Promise<void> {
     await this.archiveQueue;
+  }
+
+  /** All received sentences, including earlier archive data after rejoining. */
+  async entireTranscript(): Promise<string[]> {
+    await this.flushTranscript();
+    const lines = new Map<string, { speaker: string; text: string }>();
+    if (this.transcriptFile) {
+      try {
+        const raw = await readFile(this.transcriptFile, 'utf8');
+        for (const row of raw.split('\n')) {
+          if (!row.trim()) continue;
+          try {
+            const r = JSON.parse(row);
+            if (r.meetingId !== this.meetingId || typeof r.sentenceId !== 'string' || typeof r.text !== 'string') continue;
+            lines.set(r.sentenceId, { speaker: r.speaker?.name ?? r.speaker?.id ?? '?', text: r.text });
+          } catch {
+            log.warn('meeting', 'transcript-invalid-row', { meetingId: this.meetingId });
+          }
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+    }
+    // Memory also preserves received text if disk writing failed or debounce is pending.
+    for (const [id, line] of this.fullTranscript) lines.set(id, line);
+    return [...lines.values()].map((line, i) => `[${i + 1}] ${line.speaker}: ${line.text}`);
+  }
+
+  /** Stable per-question snapshot; later transcript revisions cannot change it. */
+  async transcriptSnapshot(lines: string[]): Promise<string | undefined> {
+    if (!this.transcriptFile) return undefined;
+    const { randomUUID } = await import('node:crypto');
+    const file = this.transcriptFile.replace(/\.jsonl$/, `-${randomUUID()}.txt`);
+    await mkdir(join(file, '..'), { recursive: true, mode: 0o700 });
+    await writeFile(file, lines.join('\n'), { encoding: 'utf8', mode: 0o600 });
+    return file;
   }
 
   /** Append (or replace) the sentence in the rolling buffer, then fan out. */

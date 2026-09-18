@@ -1,3 +1,12 @@
+import { startTaskDocuments, syncTaskDocument } from '../team/task-document';
+import { startTaskDeadlines } from '../team/task-deadlines';
+import { coordinatorEnabled, teamIntake, coordinatorPrompt, assignmentOf, applyTeamAction, recoverTeamResults } from '../team/coordinator';
+import { activeTask, readTasks, taskFile } from '../team/task-store';
+import { deliveryInstructions, filterDeliveredFinal, handoffReturnMention } from './reply-delivery';
+import { acceptsAgentMention } from './agent-handoff';
+import { readHandbook, readCoordinatorContext, handbookSections } from './coordinator-handbook';
+import { readReview, reviewPath } from '../team/review-store';
+import { fetchGroupDirectory, directoryInstructions, enrichMemberRoles } from './group-directory';
 import { createChannelCache } from './channel-cache';
 import { projectRunContext, projectBindingHint } from '../team/project-bindings';
 import type {
@@ -47,7 +56,7 @@ import {
   toPolicyAttachment,
   toPromptAttachment,
 } from '../media/attachment';
-import { canUseDm, canUseGroup, requireMentionForChat } from '../policy/access';
+import { canRunAdminCommand, canUseDm, canUseGroup, requireMentionForChat } from '../policy/access';
 import { MeetingManager } from '../meeting/manager';
 import type { VcRequestClient } from '../meeting/api';
 import { attachMeetingAgent, summarizeEndedMeeting } from '../meeting/orchestrator';
@@ -245,6 +254,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
       dmMode: 'open',
       requireMention: false,
       respondToMentionAll: false,
+      botLoopGuard: { enabled: true, windowMs: 600_000, maxBotMentions: 12, scope: 'chat', onTrip: 'reject' },
     },
     // Disable per-chat serialization so we can implement our own
     // debounce + run-chain policy (see pending-queue + runChain below).
@@ -480,6 +490,9 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
   await ownerRefresh.start();
   const knownChatsRefresh = startKnownChatsRefreshTimer(channel, controls);
 
+
+  const stopTaskDocuments = await startTaskDocuments(dirname(controls.configPath), controls.profile, channel, chatId => coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId]));
+  const stopTaskDeadlines = await startTaskDeadlines(dirname(controls.configPath), controls.profile, channel, chatId => coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId]));
   const identity = channel.botIdentity;
   // Late-bind the bot's own IM identity into the agent adapter so the system
   // prompt can state "this open_id is you" with the real value. Covers both
@@ -519,6 +532,8 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
       ownerRefresh.stop();
       knownChatsRefresh.stop();
       keepalive.stop();
+      stopTaskDeadlines();
+      stopTaskDocuments();
       // Stop meeting timers but stay in the meetings: /reconnect tears the
       // channel down and rebuilds it, and auto-leaving every meeting on a
       // reconnect would be surprising.
@@ -639,7 +654,17 @@ type LogThreadModeOverride = (input: {
   threadId: string;
 }) => void;
 
+const receivedMessageIds = new Set<string>();
+const handoffRuntimeStartedAt = Date.now();
 async function intakeMessage(deps: IntakeDeps): Promise<void> {
+  const agentMessage = deps.msg.senderIsBot || senderTypeOf(deps.msg) === 'bot';
+  const boundGroup = deps.controls.profileConfig.workbench?.groups[deps.msg.chatId];
+  if (agentMessage && !acceptsAgentMention(deps.msg.mentionedBot, boundGroup)) return;
+  if (agentMessage && deps.msg.createTime < handoffRuntimeStartedAt) return;
+  const deliveryKey = deps.controls.profile + ':' + deps.msg.messageId;
+  if (receivedMessageIds.has(deliveryKey)) return;
+  receivedMessageIds.add(deliveryKey);
+  if (receivedMessageIds.size > 4000) for (const id of [...receivedMessageIds].slice(0, 1000)) receivedMessageIds.delete(id);
   const {
     channel,
     agent,
@@ -693,9 +718,9 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
       threadId,
     });
   }
-  const scope = chatMode === 'topic' && threadId
-    ? `${msg.chatId}:${threadId}`
-    : msg.chatId;
+  const assigned = assignmentOf([emsg]);
+  const baseScope = chatMode === 'topic' && threadId ? `${msg.chatId}:${threadId}` : msg.chatId;
+  const scope = assigned ? `${baseScope}:team:${assigned.taskId}:${assigned.stepId}` : baseScope;
   log.info('intake', 'enter', {
     profile: controls.profile,
     scope,
@@ -745,6 +770,23 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     return;
   }
 
+  const capabilityAssignment = assignmentOf([emsg]);
+  if (capabilityAssignment && emsg.content.includes('[协作能力查询]')) {
+    await channel.send(msg.chatId, {markdown:`[协作回执 ${capabilityAssignment.taskId} ${capabilityAssignment.stepId} 完成]\n本群能力描述：${JSON.stringify({role:boundGroup?.role,description:boundGroup?.rolePrompt || '未填写，请拥有者在软件中补充职责与能力边界；不能据名称推断能力',source:'当前群保存配置，权限尚需实际验证'})}`}, {replyTo:msg.messageId,...(chatMode==='topic'?{replyInThread:true}:{}),mentions:[{key:'@organizer',openId:msg.senderId,isBot:true}]});
+    return;
+  }
+  const teamHandled = await teamIntake({
+    file: taskFile(dirname(controls.configPath), controls.profile, scope), msg: emsg,
+    enabled: coordinatorEnabled(boundGroup), profile: controls.profile,
+    send: text => channel.send(msg.chatId, { markdown: text }, { replyTo: msg.messageId, ...(chatMode === 'topic' ? { replyInThread: true } : {}) }),
+    reset: () => sessions.clear(scope),
+    admin: canRunAdminCommand(controls.profileConfig, controls, msg.senderId).ok,
+    recover: async () => recoverTeamResults(taskFile(dirname(controls.configPath), controls.profile, scope),
+      channel.rawClient as unknown as VcRequestClient,
+      await fetchGroupDirectory(channel.rawClient as unknown as VcRequestClient, msg.chatId), threadId),
+  });
+  if (teamHandled) return;
+
   // A merge_forward whose sub-messages the SDK could not fetch (transient
   // upstream failure, already retried inside @larksuite/channel) arrives as the
   // fetch_failed sentinel. Feeding it to the agent would read as an empty
@@ -790,6 +832,11 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     return;
   }
 
+  const review = await readReview(reviewPath(dirname(controls.configPath), controls.profile, scope));
+  if (review && review.state !== 'approved') {
+    await channel.send(emsg.chatId, { markdown: `事项 ${review.id} ${review.state === 'pending' ? '等待负责人确认' : '已被拒绝，请修改方案并重新 /review request'}。当前会话暂不启动新任务；用 /review status 查看。` }, { replyTo: emsg.messageId });
+    return;
+  }
   const size = pending.push(scope, emsg);
   log.info('intake', 'queued', { scope, queueSize: size, debounceMs: DEBOUNCE_MS });
 }
@@ -885,7 +932,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   // the user is pointing at. An already-engaged topic keeps that history in its
   // resumed session, so we skip the fetch there.
   let topicContext: QuotedContext[] = [];
-  if (mode === 'topic' && threadId && !sessions.getRaw(scope)) {
+  if (mode === 'topic' && threadId && !sessions.getRaw(scope) && !assignmentOf(batch) && !coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId])) {
     const exclude = new Set([...batchIds, ...quoteTargets]);
     topicContext = await fetchTopicContext(channel, threadId, {
       maxMessages: 40,
@@ -921,6 +968,39 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
       ]
     : undefined;
 
+  const coordinatorGroup = controls.profileConfig.workbench?.groups[chatId];
+  const assignment = assignmentOf(batch);
+  const returnMention = handoffReturnMention(batch, assignment ? { ...coordinatorGroup, role: 'executor' } : coordinatorGroup);
+  const teamFile = taskFile(dirname(controls.configPath), controls.profile, scope);
+  const teamTask = coordinatorEnabled(coordinatorGroup) && !assignment ? activeTask(await readTasks(teamFile)) : undefined;
+  if (teamTask) {
+    try {
+      const hadDocument = !!teamTask.document?.url;
+      const url = await syncTaskDocument(teamFile, teamTask.id, channel.rawClient as unknown as VcRequestClient);
+      teamTask.document = (await readTasks(teamFile)).tasks.find(t => t.id === teamTask.id)?.document;
+      if (!hadDocument) await channel.send(chatId, {markdown:`${teamTask.id} · 任务文档：${url}`}, {replyTo:lastMsg.messageId});
+    } catch (e) {
+      await channel.send(chatId, {markdown:`任务已保存，文档尚未就绪，暂不继续派单：${(e as Error).message}。修复权限后 /team resume 重试。`}, {replyTo:lastMsg.messageId});
+      return;
+    }
+  }
+  const coordinatorDoc = !assignment && coordinatorEnabled(coordinatorGroup) ? coordinatorGroup?.coordinatorDoc : undefined;
+  let handbookContext: string[] = teamTask ? ['通用组织流程（场景规则可补充，不改变授权）：'+JSON.stringify(handbookSections)] : [];
+  if (coordinatorDoc) {
+    try { handbookContext.push(await readHandbook(channel.rawClient as unknown as VcRequestClient, coordinatorDoc), ...(teamTask ? [] : [await readCoordinatorContext(channel.rawClient as unknown as VcRequestClient, chatId, lastMsg.createTime, threadId)])); }
+    catch (e) {
+      await channel.send(chatId, { text: e instanceof Error ? e.message : '协作手册读取失败，本次没有开始自动协作。' });
+      return;
+    }
+  }
+  const teamDirectory = !assignment && lastMsg.chatType === 'group' ? await fetchGroupDirectory(channel.rawClient as unknown as VcRequestClient, chatId) : { chatId, complete: false, members: [], issues: [] };
+  if (teamTask) await enrichMemberRoles(teamDirectory, controls.configPath);
+  const directoryContext = lastMsg.chatType === 'group'
+    ? [directoryInstructions(teamDirectory, {
+        openId: channel.botIdentity?.openId,
+        ownerOpenId: controls.ownerRefreshState === 'ok' ? controls.botOwnerId : undefined,
+      })] : [];
+  const deliveryStartedAt = Date.now();
   const bindingHint = projectBindingHint(controls.profile, chatId, mode === 'topic' ? threadId : undefined);
   const prompt = bindingHint + '\n\n' + buildPrompt(
     batch,
@@ -928,7 +1008,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     quotes,
     topicContext,
     channel.botIdentity,
-    extraInstructions,
+    [...(extraInstructions ?? []), ...directoryContext, ...handbookContext, ...(teamTask ? [coordinatorPrompt(teamTask)] : coordinatorEnabled(coordinatorGroup) ? ['本轮是普通对话，不自动派发任务。如用户需要组织协作，提示发送“组织协作：目标”。'] : []), ...(returnMention ? ['本轮是机器人交接任务。最终结果由软件自动真实 @ 派发者交回；直接输出完整结果即可，不要再用发消息工具重复发送最终报告。'] : []), ...(agentKind === 'codex' ? [deliveryInstructions] : [])],
   );
   log.info('prompt', 'built', {
     promptChars: prompt.length,
@@ -1000,7 +1080,21 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   const { execution, cwdRealpath: cwd } = flow;
   activePolicyFingerprints.set(scope, flow.policy.policyFingerprint);
   const handle = execution.handle;
-  const eventStream = execution.subscribe();
+  let finalAlreadyDelivered = false;
+  const eventStream = agentKind === 'codex' && !teamTask && !assignment
+    ? filterDeliveredFinal(execution.subscribe(), {
+        client: channel.rawClient as unknown as VcRequestClient,
+        chatId,
+        appId: controls.cfg.accounts.app.id,
+        startedAt: deliveryStartedAt,
+        requiredMentionId: returnMention?.openId,
+        ...(mode === 'topic' && threadId ? { threadId } : {}),
+        onVerified: (messageId) => {
+          finalAlreadyDelivered = true;
+          log.info('outbound', 'skip-already-delivered', { scope, messageId });
+        },
+      })
+    : execution.subscribe();
   if (flow.resumeFrom) {
     log.info('session', 'resume', { sessionId: flow.resumeFrom, cwd });
   } else {
@@ -1080,6 +1174,24 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     cotEnabled || replyMode === 'card' ? undefined : addWorkingReaction(channel, lastMsg.messageId);
 
   try {
+    if (teamTask || assignment) {
+      const state = finalAnswerOnlyState(await processAgentStream(handle, eventStream, scope, idleTimeoutMs, recordSession, async () => {}));
+      if (teamTask) {
+        await applyTeamAction({ file: teamFile, taskId: teamTask.id, body: renderText(state), success: state.terminal === 'done',
+          channel, chatId, directory: teamDirectory, sendOpts,
+          enabled: () => coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId]) });
+        if (!activeTask(await readTasks(teamFile))) sessions.clear(scope);
+      } else if (assignment && returnMention) {
+        const body = renderText(state);
+        const status = state.terminal !== 'done' || !body.trim() ? '阻塞' : body.trim().replace(/^\*\*/, '').match(/^(需要补充|验收未通过|阻塞)/)?.[1] ?? '完成';
+        const result = await channel.send(chatId, { markdown: `[协作回执 ${assignment.taskId} ${assignment.stepId} ${status}]\n${body || '执行未产生结果，请人工检查。'}` }, { ...sendOpts, mentions: [returnMention] });
+        requireMessageReceipt(result, 'team-result');
+        sessions.clear(scope);
+      } else {
+        await sendFinalReply({channel, chatId, scope, state, replyMode, sendOpts, returnMention, cardRenderOptions});
+      }
+      return;
+    }
     if (cotEnabled) {
       const cotPublisher = new CotPublisher({
         client: cotClient,
@@ -1123,6 +1235,8 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           state: finalAnswerOnlyState(finalState),
           replyMode,
           sendOpts,
+          alreadyDelivered: finalAlreadyDelivered,
+          returnMention,
           cardRenderOptions,
         });
         return;
@@ -1197,6 +1311,8 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           state: finalReplyState(progress, filterForPrefs(latestState)),
           replyMode,
           sendOpts,
+          alreadyDelivered: finalAlreadyDelivered,
+          returnMention,
           cardRenderOptions,
         });
       }
@@ -1260,6 +1376,8 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           state: finalReplyState(progress, filterForPrefs(latestState)),
           replyMode,
           sendOpts,
+          alreadyDelivered: finalAlreadyDelivered,
+          returnMention,
           cardRenderOptions,
         });
       }
@@ -1285,6 +1403,8 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
             : filterForPrefs(finalState),
         replyMode,
         sendOpts,
+        alreadyDelivered: finalAlreadyDelivered,
+          returnMention,
         cardRenderOptions,
       });
     }
@@ -1448,6 +1568,8 @@ async function recallStreamedMessage(
 }
 
 async function sendFinalReply(input: {
+  alreadyDelivered?: boolean;
+  returnMention?: ReturnType<typeof handoffReturnMention>;
   channel: LarkChannel;
   chatId: string;
   scope: string;
@@ -1456,6 +1578,7 @@ async function sendFinalReply(input: {
   sendOpts: { replyTo: string; replyInThread?: boolean };
   cardRenderOptions: { signCallback?: (action: string) => string };
 }): Promise<void> {
+  if (input.alreadyDelivered && input.state.terminal === 'done') return;
   const body = renderText(input.state);
 
   // Nothing deliverable to send (agent produced no text on a clean finish;
@@ -1466,7 +1589,11 @@ async function sendFinalReply(input: {
     return;
   }
 
-  if (input.replyMode === 'card') {
+  if (input.returnMention) {
+    const result = await input.channel.send(input.chatId, { markdown: body }, { ...input.sendOpts, mentions: [input.returnMention] });
+    requireMessageReceipt(result, 'handoff');
+    log.info('outbound', 'sent', { ...outboundLogFields(input, 'handoff', body, result), returnMentionId: input.returnMention.openId });
+  } else if (input.replyMode === 'card') {
     const result = await input.channel.send(
       input.chatId,
       { card: renderCard(input.state, input.cardRenderOptions) },

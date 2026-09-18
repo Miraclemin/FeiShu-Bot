@@ -392,3 +392,25 @@ describe('in-meeting trigger matching', () => {
     expect(triggerPrefixes('@bot', undefined)).toEqual(['@bot']);
   });
 });
+
+
+describe('entire transcript archive', () => {
+  it('restores earlier sentences on rejoin and replaces revisions without duplicate lines', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'meeting-full-'));
+    try {
+      const options = { client: noopClient, meetingId: '70001', meetingNo: '123456789', config: cfg(), transcriptDir: dir };
+      const first = new MeetingSession(options);
+      first.ingest(transcriptItem('a', [{ sentence_id: '1', text: '初稿' }]));
+      await first.flushTranscript();
+      const second = new MeetingSession(options);
+      expect((await second.entireTranscript()).join('')).toContain('初稿');
+      second.ingest(transcriptItem('b', [{ sentence_id: '1', text: '修正版' }, { sentence_id: '2', text: '结论' }]));
+      const all = await second.entireTranscript();
+      expect(all).toHaveLength(2);
+      expect(all[0]).toContain('修正版');
+      expect(all.join('')).not.toContain('初稿');
+      const file = await second.transcriptSnapshot(all);
+      expect(await readFile(file!, 'utf8')).toBe(all.join('\n'));
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+});

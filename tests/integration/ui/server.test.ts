@@ -128,7 +128,7 @@ describe('ui server (supervisor-backed)', () => {
   it('assigns a stable default avatar and persists a user selection without restarting', async () => {
     const initial = await json(await get('/api/profiles', handle.token));
     const original = initial.profiles.find((p: {name: string}) => p.name === 'claude').avatarId;
-    expect(original).toMatch(/^(dog-a[12]|otter-b[12]|owl-c[12])$/);
+    expect(original).toMatch(/^friend-/);
     const controls = online.get('claude');
     await post('/api/profiles/rename', handle.token, { profile: 'claude', displayName: '新名字' });
     const renamed = await json(await get('/api/profiles', handle.token));
@@ -143,6 +143,46 @@ describe('ui server (supervisor-backed)', () => {
     }
     expect((await post('/api/profiles/avatar', 'bad-token', { profile: 'claude', avatarId: 'dog-a1' })).status).toBe(401);
     expect((await post('/api/profiles/avatar', handle.token, { profile: 'missing', avatarId: 'dog-a1' })).status).toBe(404);
+  });
+
+  it('shuffles distinct avatars, persists them and leaves running agents intact', async () => {
+    const initial = await json(await get('/api/profiles', handle.token));
+    const controls = online.get('claude');
+    const result = await json(await post('/api/profiles/avatars/shuffle', handle.token, {}));
+    const ids = Object.values(result.avatars);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const p of initial.profiles) expect(result.avatars[p.name]).not.toBe(p.avatarId);
+    const after = await json(await get('/api/profiles', handle.token));
+    for (const p of after.profiles) expect(p.avatarId).toBe(result.avatars[p.name]);
+    const one = await json(await post('/api/profiles/avatars/shuffle', handle.token, { profile: 'claude' }));
+    expect(one.avatars.claude).not.toBe(result.avatars.claude);
+    const saved = await loadRootConfig(configPath);
+    expect(saved!.profiles.claude!.avatarId).toBe(one.avatars.claude);
+    expect(online.get('claude')).toBe(controls);
+    expect((await post('/api/profiles/avatars/shuffle', 'bad-token', {})).status).toBe(401);
+    expect((await post('/api/profiles/avatars/shuffle', handle.token, { profile: 'missing' })).status).toBe(404);
+    expect((await post('/api/profiles/avatars/shuffle', handle.token, { profile: 12 })).status).toBe(400);
+  });
+
+  it('preserves a coordinator chosen human avatar across reloads and shuffles', async () => {
+    const root = (await loadRootConfig(configPath))!;
+    root.profiles.claude!.workbench = { revision: 0, groups: { oc_team: { role: 'coordinator' } } } as any;
+    root.profiles.work!.workbench = { revision: 0, groups: { oc_team: { role: 'coordinator' } } } as any;
+    await saveRootConfig(root, configPath);
+    const listed = await json(await get('/api/profiles', handle.token));
+    const coordinator = listed.profiles.find((p: {name: string}) => p.name === 'claude');
+    expect(coordinator.avatarId).toMatch(/^farm-/);
+    expect(coordinator.avatarLocked).toBe(true);
+    const other = listed.profiles.find((p: {name: string}) => p.name === 'work');
+    expect(other.avatarId).toMatch(/^farm-/);
+    expect(other.avatarId).not.toBe(coordinator.avatarId);
+    expect((await post('/api/profiles/avatar', handle.token, { profile: 'claude', avatarId: 'farm-grandma' })).status).toBe(200);
+    const reloaded = await json(await get('/api/profiles', handle.token));
+    expect(reloaded.profiles.find((p: {name: string}) => p.name === 'claude').avatarId).toBe('farm-grandma');
+    const shuffled = await json(await post('/api/profiles/avatars/shuffle', handle.token, {}));
+    expect(shuffled.avatars.claude).toBe('farm-grandma');
+    expect((await post('/api/profiles/avatar', handle.token, { profile: 'claude', avatarId: 'owl-c1' })).status).toBe(400);
+    expect((await loadRootConfig(configPath))!.profiles.claude!.avatarId).toBe('farm-grandma');
   });
 
   it('rejects API calls without the token', async () => {

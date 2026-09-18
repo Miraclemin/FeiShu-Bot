@@ -253,6 +253,7 @@ async function createHarness(): Promise<{
   });
   const profileConfig = {
     ...baseProfileConfig,
+    workbench: {revision:0,protectDocuments:true as const,groups:{oc_chat:{enabled:true,name:'test',workspace,persona:'',documents:[],skills:[]}}},
     workspaces: {
       ...baseProfileConfig.workspaces,
       default: workspace,
@@ -382,7 +383,7 @@ function message(input: {
     ],
     mentionAll: false,
     mentionedBot: true,
-    createTime: 1760000001000,
+    createTime: Date.now(),
     ...(input.rawSenderType
       ? {
           raw: {

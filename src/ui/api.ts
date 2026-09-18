@@ -285,6 +285,7 @@ function parseConfigBody(state: MutableProfileState, body: unknown): ParsedConfi
  */
 export async function applyConfig(rt: UiRuntime, body: unknown): Promise<ConfigView> {
   const p = parseConfigBody(rt, body);
+  const meetingToggled = p.meeting.enabled !== rt.profileConfig.meeting.enabled;
   let identityApplied = false;
   try {
     if (p.identityChanged) {
@@ -308,6 +309,10 @@ export async function applyConfig(rt: UiRuntime, body: unknown): Promise<ConfigV
     }
     if (err instanceof ApiError) throw err;
     throw new ApiError(500, `保存失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (meetingToggled) {
+    try { await rt.restart({ wait: true }); }
+    catch (err) { throw new ApiError(500, `会议设置已保存，但连接重启失败，请重新启动 Agent：${String(err)}`); }
   }
   log.info('ui', 'config-saved', { profile: rt.profile, mode: p.mode, live: true });
   return buildConfigView(rt, true);

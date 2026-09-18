@@ -1,22 +1,30 @@
+/// <reference types="vite/client" />
+// Optional atlas: unfinished asset additions must not break packaged builds.
+const people = Object.values(import.meta.glob('../assets/mascots/farm-family.png', { eager: true, query: '?url', import: 'default' }))[0] as string | undefined;
+import coordinator from '../assets/mascots/coordinator-human.png';
+import atlas from '../assets/mascots/friends-transparent.png';
 import catalog from '../../../resources/mascot-catalog.json';
 import { defaultAvatarId } from '../../../src/config/avatar';
-import dogA1 from '../assets/mascots/dog-a1.png';
-import dogA2 from '../assets/mascots/dog-a2.png';
-import otterB1 from '../assets/mascots/otter-b1.png';
-import otterB2 from '../assets/mascots/otter-b2.png';
+import dog from '../assets/mascots/dog-transparent.png';
+import otter from '../assets/mascots/otter-transparent.png';
+import owl from '../assets/mascots/owl-transparent.png';
 import owlC1 from '../assets/mascots/owl-c1.png';
-import owlC2 from '../assets/mascots/owl-c2.png';
 
-const images: Record<string, string> = {
-  'dog-a1': dogA1, 'dog-a2': dogA2, 'otter-b1': otterB1,
-  'otter-b2': otterB2, 'owl-c1': owlC1, 'owl-c2': owlC2,
-};
+const legacyIds = ['dog-a1', 'dog-a2', 'otter-b1', 'otter-b2', 'owl-c1', 'owl-c2'];
 export const mascotOptions = catalog;
 export const appMascot = owlC1;
 export function AgentAvatar({ profile, avatarId, className = 'size-12' }: {
   profile: string; avatarId?: string; className?: string;
 }) {
-  const id = avatarId && images[avatarId] ? avatarId : defaultAvatarId(profile);
-  return <img src={images[id]} alt="" draggable={false}
-    className={`shrink-0 rounded-2xl object-cover ring-1 ring-black/5 ${className}`} />;
+  const id = avatarId && catalog.some(item => item.id === avatarId) ? avatarId : defaultAvatarId(profile);
+  if (id === 'coordinator-human') return <img src={coordinator} alt="" draggable={false} className={`shrink-0 object-contain ${className}`} />;
+  const item = catalog.find(item => item.id === id);
+  if (item?.humanAtlas && !people) return <img src={coordinator} alt="" draggable={false} className={`shrink-0 object-contain ${className}`} />;
+  if (item?.humanAtlas) return <span aria-hidden="true" className={`block shrink-0 ${className}`}
+    style={{ backgroundImage: `url(${people})`, backgroundRepeat: 'no-repeat', backgroundSize: `${1448 / item.width! * 100}% ${1086 / item.height! * 100}%`, backgroundPosition: `${item.x! / (1448 - item.width!) * 100}% ${item.y! / (1086 - item.height!) * 100}%` }} />;
+  if (item?.atlas) return <span aria-hidden="true" className={`block shrink-0 ${className}`}
+    style={{ backgroundImage: `url(${atlas})`, backgroundSize: `${1374 / item.width! * 100}% ${1145 / item.height! * 100}%`, backgroundPosition: `${item.x! / (1374 - item.width!) * 100}% ${item.y! / (1145 - item.height!) * 100}%` }} />;
+  const index = Math.max(0, legacyIds.indexOf(id));
+  return <img src={[dog, otter, owl][Math.floor(index / 2)]} alt="" draggable={false}
+    className={`shrink-0 object-contain ${className}`} style={{ transform: index % 2 ? 'scaleX(-1)' : undefined }} />;
 }

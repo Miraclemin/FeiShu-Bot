@@ -1,16 +1,18 @@
 [
   {
     "id": "messaging",
-    "label": "机器人群聊与回复",
+    "label": "机器人群聊、回复与读取群成员（用于准确 @）",
     "default": true,
     "tenant": [
       "im:chat:read",
+      "im:chat.members:read",
       "im:message.group_at_msg:readonly",
       "im:message.p2p_msg:readonly",
       "im:message:send_as_bot",
       "im:message:readonly",
       "im:message:update",
-      "im:resource"
+      "im:resource",
+      "im:chat:create"
     ],
     "user": []
   },
@@ -72,11 +74,12 @@
   },
   {
     "id": "document-write",
-    "label": "创建或编辑文档",
+    "label": "创建编辑文档与分享协作手册",
     "default": true,
     "tenant": [
       "docx:document:create",
-      "docx:document:write_only"
+      "docx:document:write_only",
+      "docs:permission.member:create"
     ],
     "user": []
   },

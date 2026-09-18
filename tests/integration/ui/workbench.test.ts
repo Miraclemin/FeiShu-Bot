@@ -35,6 +35,16 @@ describe('workbench engine switch', () => {
     expect(saved.workbench?.revision).toBe(1); expect(saved.access.allowedChats).toEqual(['oc_team']);
     expect(saved.larkCli.identityPreset).toBe('bot-only'); expect(saved.preferences.model).toBe('default');
   });
+  it('preserves explicitly enabled meeting and invite settings on group save', async () => {
+    const { root, sup, body } = await setup();
+    const file = join(root, 'config.json');
+    const config = (await loadRootConfig(file))!;
+    config.profiles.assistant!.meeting.enabled = true;
+    config.profiles.assistant!.meeting.autoJoinOnInvite = true;
+    await saveRootConfig(config, file);
+    await updateWorkbench(sup, 'assistant', body, root);
+    expect((await loadRootConfig(file))!.profiles.assistant!.meeting).toMatchObject({ enabled: true, autoJoinOnInvite: true });
+  });
   it('rejects stale writes before stopping the bot', async () => {
     const { root, sup, body } = await setup();
     await updateWorkbench(sup, 'assistant', body, root);

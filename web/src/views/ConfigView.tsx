@@ -193,6 +193,16 @@ export function ConfigView({ profile }: { profile: string }) {
         profile={profile}
         cfg={cfg.meeting}
         onChange={(next) => set("meeting", next)}
+        saving={saving}
+        onSave={async () => {
+          setSaving(true);
+          try {
+            const next = await apiPost<ConfigData>(`/api/config?profile=${encodeURIComponent(profile)}`, { meeting: cfg.meeting });
+            setCfg(current => current ? { ...current, meeting: next.meeting } : current);
+            toast.success(next.live ? "会议设置已保存并应用" : "会议设置已保存，启动 Agent 后生效");
+          } catch (e) { toast.error((e as Error).message); }
+          finally { setSaving(false); }
+        }}
       />
 
       <Card>
@@ -223,9 +233,9 @@ export function ConfigView({ profile }: { profile: string }) {
         </CardContent>
       </Card>
 
-      <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-background/90 py-3 backdrop-blur">
+      <div className="flex justify-end gap-2 border-t py-3">
         <Button variant="outline" onClick={() => load()} disabled={saving}>重新加载</Button>
-        <Button onClick={save} disabled={saving}>{saving ? "保存中…" : "保存"}</Button>
+        <Button onClick={save} disabled={saving}>{saving ? "保存中…" : "保存飞书与会议设置"}</Button>
       </div>
     </div>
   );
@@ -334,7 +344,9 @@ function MeetingPreflightPanel({ pre, checking, onRecheck }: {
  * meetings — including whether `vc.bot.*` pushes are actually arriving, which
  * is the one thing that can't be verified from code alone.
  */
-function MeetingCard({ profile, cfg, onChange }: {
+function MeetingCard({ profile, cfg, onChange, onSave, saving }: {
+  onSave: () => Promise<void>;
+  saving: boolean;
   profile: string;
   cfg: MeetingConfig;
   onChange: (next: MeetingConfig) => void;
@@ -408,9 +420,10 @@ function MeetingCard({ profile, cfg, onChange }: {
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
           让 bot 作为参会人加入飞书会议，读字幕/弹幕并作答。需要应用已开通内测与
-          <span className="font-mono"> vc:meeting.bot.join:write</span>。开关变更后需重启该 profile 生效。
+          <span className="font-mono"> vc:meeting.bot.join:write</span>。修改后点击“保存会议设置并应用”，在线 Agent 会自动重连。
         </p>
 
+        <Button disabled={saving} onClick={async () => { await onSave(); await load(); }}>{saving ? "应用中…" : "保存会议设置并应用"}</Button>
         {cfg.enabled && (
           <>
             <MeetingPreflightPanel pre={pre} checking={checking} onRecheck={preflight} />
@@ -431,7 +444,7 @@ function MeetingCard({ profile, cfg, onChange }: {
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="字幕上下文条数（10-2000）">
+              <Field label="最近字幕显示条数（10-2000）" hint="全部已收到的转录持续保存在本机；问答可查询整场，会后纪要分段汇总整场。">
                 <Input type="number" min={10} max={2000} value={cfg.transcript.keep}
                   onChange={(e) => set("transcript", { ...cfg.transcript, keep: Number(e.target.value) })} />
               </Field>
@@ -469,14 +482,15 @@ function MeetingCard({ profile, cfg, onChange }: {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Label>在会会议（{live.sessions.length}）</Label>
-                  <Badge variant={live.push.hooked ? (live.push.received > 0 ? "success" : "secondary") : "destructive"}>
+                  <Badge variant={live.push.hooked ? "secondary" : "destructive"}>
                     {live.push.hooked
                       ? live.push.received > 0
-                        ? `推送正常 · ${live.push.received} 条`
-                        : "推送已挂载 · 未收到"
-                      : "推送未挂载"}
+                        ? `本次连接收到 ${live.push.received} 个会议事件`
+                        : "等待会议事件"
+                      : "会议事件推送未连接"}
                   </Badge>
                 </div>
+                <p className="text-xs text-muted-foreground">事件包含邀请、会议活动和结束通知，不代表已收到转录。</p>
                 {live.push.hooked && live.push.received === 0 && (
                   <p className="text-xs text-muted-foreground">
                     钩子已装好但还没收到事件。确认开发者后台已用「长连接」模式订阅 vc.bot.* 三个事件；期间通过轮询尝试接收，请以实际字幕条数为准。

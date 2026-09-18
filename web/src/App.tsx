@@ -1,3 +1,4 @@
+import { CreateTeam } from './views/CreateTeam';
 import { TeamResources } from './views/TeamResources';
 import { Button } from '@/components/ui/button';
 import { appMascot } from './components/AgentAvatar';
@@ -10,6 +11,11 @@ import { ProfilesView } from "@/views/ProfilesView";
 import { ProfileDetail } from "@/views/ProfileDetail";
 
 export function App() {
+  return <WorkbenchApp />;
+}
+
+function WorkbenchApp() {
+  const [creatingTeam,setCreatingTeam]=useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [onboard, setOnboard] = useState<OnboardState | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
@@ -43,11 +49,11 @@ export function App() {
 
   return (
     <Shell>
-      {teamOpen ? <TeamResources onBack={() => setTeamOpen(false)} /> : selected ? (
+      {creatingTeam ? <CreateTeam onBack={()=>setCreatingTeam(false)} onOpen={profile=>{setCreatingTeam(false);setSelected(profile);}} /> : teamOpen ? <TeamResources onBack={() => setTeamOpen(false)} /> : selected ? (
         <ProfileDetail profile={selected} onBack={() => { setSelected(null); void refresh(); }} />
       ) : (
         <>
-          <div className="flex justify-end mb-4"><Button variant="outline" onClick={() => setTeamOpen(true)}>团队资源 · 资料与 Skill</Button></div>
+          <div className="flex justify-end gap-2 mb-4"><Button onClick={()=>setCreatingTeam(true)}>创建协作团队</Button><Button variant="outline" onClick={() => setTeamOpen(true)}>团队资源 · 资料与 Skill</Button></div>
           <AgentOverview />
           <ProfilesView onOpen={setSelected} />
           {status && (
