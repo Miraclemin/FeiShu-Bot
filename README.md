@@ -488,7 +488,7 @@ Feishu Collaborator 基于 [Miraclemin/lark-team-agent-bridge](https://github.co
 - 目前不包含自动订阅新增资料、上传本地 Skill 到 Git 或跨机器自动派活。
 
 
-## 自动协调与任务文档（Preview 5）
+## 自动协调与任务文档（Preview 6）
 
 在群设置中启用组织者模式并填写各 Agent 职责。直接 @组织者提出目标，软件登记任务、创建独立飞书文档并协调执行。任务文档同步分工、回执、阻塞和通过 @提交的人工反馈；人协调时仍可沿用业务表格。
 

@@ -20,8 +20,12 @@ export function AgentAvatar({ profile, avatarId, className = 'size-12' }: {
   if (id === 'coordinator-human') return <img src={coordinator} alt="" draggable={false} className={`shrink-0 object-contain ${className}`} />;
   const item = catalog.find(item => item.id === id);
   if (item?.humanAtlas && !people) return <img src={coordinator} alt="" draggable={false} className={`shrink-0 object-contain ${className}`} />;
-  if (item?.humanAtlas) return <span aria-hidden="true" className={`block shrink-0 ${className}`}
-    style={{ backgroundImage: `url(${people})`, backgroundRepeat: 'no-repeat', backgroundSize: `${1448 / item.width! * 100}% ${1086 / item.height! * 100}%`, backgroundPosition: `${item.x! / (1448 - item.width!) * 100}% ${item.y! / (1086 - item.height!) * 100}%` }} />;
+  if (item?.humanAtlas) {
+    const size = Math.max(item.width!, item.height!);
+    return <span aria-hidden="true" className={`flex shrink-0 items-center justify-center ${className}`}>
+      <span style={{ width: `${item.width! / size * 100}%`, height: `${item.height! / size * 100}%`, backgroundImage: `url(${people})`, backgroundRepeat: 'no-repeat', backgroundSize: `${1448 / item.width! * 100}% ${1086 / item.height! * 100}%`, backgroundPosition: `${item.x! / (1448 - item.width!) * 100}% ${item.y! / (1086 - item.height!) * 100}%` }} />
+    </span>;
+  }
   if (item?.atlas) return <span aria-hidden="true" className={`block shrink-0 ${className}`}
     style={{ backgroundImage: `url(${atlas})`, backgroundSize: `${1374 / item.width! * 100}% ${1145 / item.height! * 100}%`, backgroundPosition: `${item.x! / (1374 - item.width!) * 100}% ${item.y! / (1145 - item.height!) * 100}%` }} />;
   const index = Math.max(0, legacyIds.indexOf(id));
