@@ -14,7 +14,7 @@ function fixtures() {
 describe('group skill policy', () => {
   it('uses installation-independent IDs for bundled skills and accepts current legacy bindings', () => {
     const all = discoverSkills();
-    const skill = all.find(s => s.path.endsWith('/resources/skills/lark-base/SKILL.md'))!;
+    const skill = all.find(s => s.path.endsWith(join('resources', 'skills', 'lark-base', 'SKILL.md')))!;
     expect(skill).toBeDefined();
     expect(skill.id).toBe(bundledSkillId('lark-base'));
     expect(selectedSkills({ids:[skill.legacyId!]},all)[0]).toBe(skill);
