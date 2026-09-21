@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import type { Plan, Rule, Run } from "../../../src/schedule/store";
 type Profile = {
   name: string;
+  displayName?: string;
   online: boolean;
   groups: { id: string; name: string; coordinator: boolean }[];
 };
@@ -208,7 +209,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
                 <option value="">请选择</option>
                 {data.profiles.map((p) => (
                   <option key={p.name} value={p.name}>
-                    {p.name}
+                    {p.displayName || p.name}
                     {p.online ? "" : "（未启动）"}
                   </option>
                 ))}
@@ -324,7 +325,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
           {preview && (
             <div className="rounded-lg bg-muted p-3 text-sm space-y-2">
               <p>
-                {profile} → {group?.name} {edit?.threadId ? "（原 Topic）" : ""}{" "}
+                {data.profiles.find(p => p.name === profile)?.displayName || profile} → {group?.name} {edit?.threadId ? "（原 Topic）" : ""}{" "}
                 · {mode === "single" ? "单 Agent" : "组织者协调"}
               </p>
               <p>
@@ -384,7 +385,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
               <span className="text-sm">{labels[p.state]}</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              {p.profile} ·{" "}
+              {data.profiles.find(x => x.name === p.profile)?.displayName || p.profile} ·{" "}
               {data.profiles
                 .find((x) => x.name === p.profile)
                 ?.groups.find((g) => g.id === p.chatId)?.name ?? p.chatId}

@@ -146,6 +146,7 @@ export async function schedulesApi(
     ...ledger,
     profiles: Object.entries(config?.profiles ?? {}).map(([name, p]) => ({
       name,
+      displayName: p.displayName || name,
       online: sup.isOnline(name),
       groups: Object.entries(p.workbench?.groups ?? {})
         .filter(([, g]) => g.enabled)
