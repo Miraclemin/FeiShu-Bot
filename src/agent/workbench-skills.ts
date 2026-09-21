@@ -7,11 +7,12 @@ import { parse as parseYaml, stringify as yaml } from 'yaml';
 import JSON5 from 'json5';
 import { parse as tomlParse, stringify as tomlStringify } from 'smol-toml';
 import type { AgentKind } from './catalog';
-export interface WorkbenchSkill { id: string; name: string; description: string; path: string; }
+export interface WorkbenchSkill { legacyId?: string; id: string; name: string; description: string; path: string; }
 export interface SkillSelection { ids: string[]; }
 /** Read metadata only; never execute skill scripts while discovering. */
 export function discoverSkills(cwd?: string, extraRoots: string[] = []): WorkbenchSkill[] {
   const home = homedir();
+  const bundledRoots = [resolve(dirname(fileURLToPath(import.meta.url)), '../resources/skills'), resolve(dirname(fileURLToPath(import.meta.url)), '../../resources/skills')].filter(existsSync).map(p => realpathSync(p));
   const roots = [join(home, '.feishu-collaborator/team-skills/installed'), resolve(dirname(fileURLToPath(import.meta.url)), '../resources/skills'), resolve(dirname(fileURLToPath(import.meta.url)), '../../resources/skills'),join(home, '.agents/skills'), join(process.env.CODEX_HOME || join(home, '.codex'), 'skills'),
     join(home, '.claude/skills'), join(home, '.hermes/skills'), join(home, '.openclaw/skills'),
     join(home, '.codex/plugins/cache'), join(home, '.claude/plugins/cache'), '/etc/codex/skills', ...extraRoots];
@@ -36,7 +37,9 @@ export function discoverSkills(cwd?: string, extraRoots: string[] = []): Workben
       if (real.startsWith(join(home, '.feishu-collaborator/team-skills/installed') + '/') && existsSync(installRecord)) {
         try { version = ' · ' + String(JSON.parse(readFileSync(installRecord, 'utf8')).commit).slice(0, 12); } catch { /* retain the skill metadata */ }
       }
-      result.push({ id: createHash('sha256').update(file).digest('hex').slice(0, 24), name: String(meta.name || basename(real)) + version, description: String(meta.description || '').slice(0, 500), path: file });
+      const legacyId = createHash('sha256').update(file).digest('hex').slice(0, 24);
+      const bundledRoot = bundledRoots.find(root => dirname(real) === root);
+      result.push({ legacyId, id: bundledRoot ? bundledSkillId(basename(real)) : legacyId, name: String(meta.name || basename(real)) + version, description: String(meta.description || '').slice(0, 500), path: file });
       return;
     }
     if (depth >= 12) throw new Error('技能目录层级过深，无法完整检查');
@@ -48,8 +51,11 @@ export function discoverSkills(cwd?: string, extraRoots: string[] = []): Workben
   for (const root of roots) scan(root, 0);
   return result.sort((a, b) => a.name.localeCompare(b.name));
 }
+export function bundledSkillId(name: string): string {
+  return createHash('sha256').update(`feishu-collaborator:bundled-skill:${name}`).digest('hex').slice(0, 24);
+}
 export function selectedSkills(selection: SkillSelection, all: WorkbenchSkill[]) {
-  const byId = new Map(all.map(s => [s.id, s]));
+  const byId = new Map(all.flatMap(s => [[s.id, s] as const, ...(s.legacyId ? [[s.legacyId, s] as const] : [])]));
   return selection.ids.map(id => { const skill = byId.get(id); if (!skill) throw new Error('本群选中的技能已移动或删除，请在工作台重新选择'); return skill; });
 }
 export function skillPrompt(skills: WorkbenchSkill[]): string {

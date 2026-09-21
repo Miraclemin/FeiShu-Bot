@@ -1,3 +1,4 @@
+import { ScheduledTasks } from './views/ScheduledTasks';
 import { CreateTeam } from './views/CreateTeam';
 import { TeamResources } from './views/TeamResources';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ export function App() {
 }
 
 function WorkbenchApp() {
+  const [scheduleOpen,setScheduleOpen]=useState(false);
   const [creatingTeam,setCreatingTeam]=useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [onboard, setOnboard] = useState<OnboardState | null>(null);
@@ -49,11 +51,11 @@ function WorkbenchApp() {
 
   return (
     <Shell>
-      {creatingTeam ? <CreateTeam onBack={()=>setCreatingTeam(false)} onOpen={profile=>{setCreatingTeam(false);setSelected(profile);}} /> : teamOpen ? <TeamResources onBack={() => setTeamOpen(false)} /> : selected ? (
+      {scheduleOpen ? <ScheduledTasks onBack={()=>setScheduleOpen(false)} /> : creatingTeam ? <CreateTeam onBack={()=>setCreatingTeam(false)} onOpen={profile=>{setCreatingTeam(false);setSelected(profile);}} /> : teamOpen ? <TeamResources onBack={() => setTeamOpen(false)} /> : selected ? (
         <ProfileDetail profile={selected} onBack={() => { setSelected(null); void refresh(); }} />
       ) : (
         <>
-          <div className="flex justify-end gap-2 mb-4"><Button onClick={()=>setCreatingTeam(true)}>创建协作团队</Button><Button variant="outline" onClick={() => setTeamOpen(true)}>团队资源 · 资料与 Skill</Button></div>
+          <div className="flex justify-end gap-2 mb-4"><Button variant="outline" onClick={()=>setScheduleOpen(true)}>定时任务</Button><Button onClick={()=>setCreatingTeam(true)}>创建协作团队</Button><Button variant="outline" onClick={() => setTeamOpen(true)}>团队资源 · 资料与 Skill</Button></div>
           <AgentOverview />
           <ProfilesView onOpen={setSelected} />
           {status && (

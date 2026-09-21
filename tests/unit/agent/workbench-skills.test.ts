@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { realpathSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { discoverSkills, selectedSkills, skillPrompt, codexSkillRuntime } from '../../../src/agent/workbench-skills';
+import { discoverSkills, bundledSkillId, selectedSkills, skillPrompt, codexSkillRuntime } from '../../../src/agent/workbench-skills';
 import { normalizeWorkbench } from '../../../src/config/workbench';
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -12,6 +12,13 @@ function fixtures() {
   return { root, all: discoverSkills(undefined, [root]).filter(s => s.path.startsWith(root)) };
 }
 describe('group skill policy', () => {
+  it('uses installation-independent IDs for bundled skills and accepts current legacy bindings', () => {
+    const all = discoverSkills();
+    const skill = all.find(s => s.path.endsWith('/resources/skills/lark-base/SKILL.md'))!;
+    expect(skill).toBeDefined();
+    expect(skill.id).toBe(bundledSkillId('lark-base'));
+    expect(selectedSkills({ids:[skill.legacyId!]},all)[0]).toBe(skill);
+  });
   it('has separate catalogs for separate groups and defaults to none', () => {
     const { all } = fixtures();
     const a = skillPrompt(selectedSkills({ ids: [all[0]!.id] }, all));

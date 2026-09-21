@@ -1,3 +1,4 @@
+import { schedulesApi } from '../schedule/api';
 import { shuffleProfileAvatars } from './fleet';
 import { readdir } from 'node:fs/promises';
 import { join, basename } from 'node:path';
@@ -196,6 +197,11 @@ async function route(
     if(!profile) throw new HttpError(400,'缺少 Agent');
     const body=await readJsonBody(req) as {chatId?:string};
     sendJson(res,200,await prepareTeamHandbook(sup,profile,body.chatId ?? '',deps.rootDir)); return;
+  }
+  if (path === '/api/schedules' && (g || p)) {
+    try { sendJson(res,200,await schedulesApi(sup,deps.rootDir,p?await readJsonBody(req) as Record<string,unknown>:undefined)); }
+    catch(e) { sendJson(res,400,{error:(e as Error).message}); }
+    return;
   }
   if (path === '/api/workbench/tasks' && (g || p)) {
     const profile = url.searchParams.get('profile');

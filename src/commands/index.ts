@@ -85,7 +85,7 @@ import { createBoundChat, defaultChatName } from '../bot/group';
 import { fetchKnownChats, type KnownChat } from '../bot/lark-info';
 import { describeMeetingError, type MeetingManager } from '../meeting/manager';
 import { isMeetingNo } from '../meeting/api';
-import { sharedMeetingInvite } from '../meeting/shared-invite';
+import { sharedMeetingInvite, isMeetingJoinRequest, type RecentMeetingInvites } from '../meeting/shared-invite';
 import { answerInMeeting, meetingScopeId } from '../meeting/orchestrator';
 import type { MeetingSession } from '../meeting/session';
 import { hasStructuredLarkCliUserAuth } from '../lark-cli/identity-policy';
@@ -117,6 +117,7 @@ export interface Controls {
   /** In-meeting agent manager; present only while the channel is connected and
    * `meeting.enabled` is on. Late-bound by startChannel. */
   meeting?: MeetingManager;
+  meetingInvites?: RecentMeetingInvites;
 }
 
 export interface CommandContext {
@@ -227,15 +228,16 @@ function isAdminCommand(cmd: string, args: string): boolean {
 export async function tryHandleCommand(ctx: CommandContext): Promise<boolean> {
   const trimmed = ctx.msg.content.trim();
   if (!trimmed.startsWith('/')) {
-    if (!ctx.controls.profileConfig.meeting.enabled || !ctx.controls.profileConfig.meeting.autoJoinOnInvite) return false;
-    const invite = sharedMeetingInvite(ctx.msg);
+    const explicitJoin = isMeetingJoinRequest(trimmed);
+    if (!explicitJoin && (!ctx.controls.profileConfig.meeting.enabled || !ctx.controls.profileConfig.meeting.autoJoinOnInvite)) return false;
+    const invite = sharedMeetingInvite(ctx.msg) ?? (explicitJoin ? ctx.controls.meetingInvites?.resolve(ctx.scope) ?? {} : undefined);
     if (!invite) return false;
     if (!canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok) {
       await reply(ctx, '请让机器人创建者分享会议邀请，或在会议内添加机器人。');
       return true;
     }
     if (!invite.meetingNo) {
-      await reply(ctx, '收到会议链接，但未能读出唯一的会议号。请发送「会议号：123456789」，我会尝试加入。');
+      await reply(ctx, '收到，但未能读出唯一的会议号。请 @我发送会议卡片、带会议号的链接，或「/meeting join 123456789」。');
       return true;
     }
     await handleMeeting(`join ${invite.meetingNo}`, ctx);
@@ -2170,6 +2172,7 @@ async function handleMeeting(args: string, ctx: CommandContext): Promise<void> {
         await reply(ctx, '用法：`/meeting join <9位会议号>`（只接受 9 位纯数字，不是会议链接）');
         return;
       }
+      await reply(ctx, `收到，正在加入会议 ${meetingNo}…`);
       try {
         const session = await manager.join(meetingNo, { originChatId: ctx.msg.chatId });
         await reply(

@@ -310,7 +310,7 @@ describe('topic message quote handling', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     expect(h.channel.streams).toHaveLength(0);
-    expect(h.channel.sent).toHaveLength(0);
+    expect(h.channel.sent.filter(message => (message.content as {markdown?:string}).markdown !== '收到，正在处理…')).toHaveLength(0);
     expect(h.channel.recallMessage).not.toHaveBeenCalled();
   });
 
@@ -460,7 +460,7 @@ describe('merge_forward fetch failure', () => {
     await waitFor(() => h.agent.runOptions.length === 1);
 
     expect(h.agent.runOptions).toHaveLength(1);
-    expect(h.channel.sent).toHaveLength(0);
+    expect(h.channel.sent.filter(message => (message.content as {markdown?:string}).markdown !== '收到，正在处理…')).toHaveLength(0);
   });
 });
 

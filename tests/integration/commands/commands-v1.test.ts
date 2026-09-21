@@ -1,3 +1,4 @@
+import { RecentMeetingInvites } from '../../../src/meeting/shared-invite';
 import { mkdir, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +35,19 @@ interface Harness {
 const cleanups: Array<() => Promise<void>> = [];
 
 describe('Bridge command contracts', () => {
+  it('joins a previously shared card on an explicit request without starting an agent', async () => {
+    const h = await createHarness();
+    h.controls.profileConfig.meeting.enabled = true;
+    h.controls.meetingInvites = new RecentMeetingInvites();
+    h.controls.meetingInvites.observe('chat-1', {content:'<meeting>🔢 199957728</meeting>',raw:{},rawContentType:'video_chat',senderIsBot:false,createTime:Date.now()});
+    const join = vi.fn().mockResolvedValue({meetingNo:'199957728'});
+    h.controls.meeting = {join} as unknown as Controls['meeting'];
+    expect(await h.run('加入上面的会议', {senderId:'ou-owner'})).toBe(true);
+    expect(join).toHaveBeenCalledWith('199957728', {originChatId:'chat-1'});
+    expect(h.channel.sent.some(x => JSON.stringify(x.content).includes('正在加入'))).toBe(true);
+    expect(lastMarkdown(h.channel)).toContain('已入会');
+  });
+
   it('joins shared meeting invitations with origin and reports join errors', async () => {
     const h = await createHarness();
     h.controls.profileConfig.meeting.enabled = true;

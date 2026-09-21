@@ -1,7 +1,10 @@
+import { changeSchedules, readSchedules } from '../schedule/store';
+import { startScheduler, ScheduleBusyError } from '../schedule/scheduler';
+import { scheduleCommand, scheduleCardAction } from '../schedule/commands';
 import { startTaskDocuments, syncTaskDocument } from '../team/task-document';
 import { startTaskDeadlines } from '../team/task-deadlines';
 import { coordinatorEnabled, teamIntake, coordinatorPrompt, assignmentOf, applyTeamAction, recoverTeamResults } from '../team/coordinator';
-import { activeTask, readTasks, taskFile } from '../team/task-store';
+import { activeTask, readTasks, taskFile, createTask, mutateTasks, touchTask } from '../team/task-store';
 import { deliveryInstructions, filterDeliveredFinal, handoffReturnMention } from './reply-delivery';
 import { acceptsAgentMention } from './agent-handoff';
 import { readHandbook, readCoordinatorContext, handbookSections } from './coordinator-handbook';
@@ -57,6 +60,8 @@ import {
   toPromptAttachment,
 } from '../media/attachment';
 import { canRunAdminCommand, canUseDm, canUseGroup, requireMentionForChat } from '../policy/access';
+import { RecentMeetingInvites } from '../meeting/shared-invite';
+import { SpawnFailed } from '../runtime/errors';
 import { MeetingManager } from '../meeting/manager';
 import type { VcRequestClient } from '../meeting/api';
 import { attachMeetingAgent, summarizeEndedMeeting } from '../meeting/orchestrator';
@@ -284,6 +289,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
   };
 
   const channel = createLarkChannel(opts);
+  controls.meetingInvites = new RecentMeetingInvites();
   const media = new MediaCache(channel, deps.appPaths?.mediaDir);
 
   // Pending → run handoff: while a run is active on a chat, block its pending
@@ -335,7 +341,12 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
           mode,
         });
       } catch (err) {
-        log.fail('flush', err);
+        log.fail('flush', err, { cause: err instanceof SpawnFailed ? String(err.cause) : undefined });
+        const detail = err instanceof SpawnFailed && String(err.cause).includes('技能')
+          ? '本群绑定的技能已移动或删除，请在软件中重新选择技能并保存。'
+          : err instanceof SpawnFailed ? '本机 Agent 启动失败，请在软件中检查 Agent 和工作目录配置。' : '处理失败，请稍后重试或查看软件日志。';
+        await channel.send(firstMsg.chatId, { markdown: `❌ ${detail}` }, { replyTo: firstMsg.messageId, ...(firstMsg.threadId ? { replyInThread: true } : {}) })
+          .catch(sendErr => log.fail('outbound', sendErr));
       } finally {
         pending.unblock(scope);
         log.info('flush', 'end');
@@ -371,6 +382,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
     },
     cardAction: async (evt) => {
       await withTrace({ chatId: evt.chatId, msgId: evt.messageId }, async () => {
+        if (await scheduleCardAction(dirname(controls.configPath), controls, channel, evt)) return;
         await handleCardAction({
           channel,
           evt,
@@ -491,6 +503,34 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
   const knownChatsRefresh = startKnownChatsRefreshTimer(channel, controls);
 
 
+  const scheduleScopes = new Set<string>();
+  const stopSchedules = startScheduler(dirname(controls.configPath), controls.profile, async (plan, run) => {
+    const group = controls.profileConfig.workbench?.groups[plan.chatId];
+    if (!group?.enabled || !canRunAdminCommand(controls.profileConfig, controls, plan.creator).ok || !canUseGroup(controls.profileConfig, controls, plan.chatId, plan.creator).ok) throw new Error('群未启用或创建人的执行权限已失效');
+    if (plan.mode === 'coordinator' && !coordinatorEnabled(group)) throw new Error('本群组织者模式未开启');
+    const base = plan.threadId ? `${plan.chatId}:${plan.threadId}` : plan.chatId;
+    if (scheduleScopes.has(base)) throw new ScheduleBusyError('同一群／Topic 正在执行定时任务');
+    scheduleScopes.add(base);
+    try {
+    const scope = plan.mode === 'coordinator' ? base : `${base}:schedule:${run.id}`;
+    const file = taskFile(dirname(controls.configPath), controls.profile, scope);
+    if (activeRuns.get(base) || activeTask(await readTasks(taskFile(dirname(controls.configPath), controls.profile, base)))) throw new ScheduleBusyError('该群／Topic 当前有任务，未启动本次计划');
+    if (plan.threadId && !plan.anchorId) throw new Error('Topic 缺少可回复的消息，请在该 Topic 中 @机器人创建计划');
+    const marker = await channel.send(plan.chatId, {markdown:`**定时任务开始 · ${plan.name}**\n${plan.id} / ${run.id}\n${plan.prompt}`}, plan.threadId ? {replyTo:plan.anchorId,replyInThread:true}:{});
+    if (!marker.messageId) throw new Error('开始通知结果不确定，未自动重试');
+    const task = await mutateTasks(file,l=>{l.context={profile:controls.profile,chatId:plan.chatId,threadId:plan.threadId};return createTask(l,`定时计划 ${plan.id} / ${run.id}\n${plan.prompt}`,plan.creator,marker.messageId!);});
+    await changeSchedules(dirname(controls.configPath),l=>{const r=l.runs.find(r=>r.id===run.id);if(r){r.taskFile=file;r.taskId=task.id;}});
+    try { await syncTaskDocument(file,task.id,channel.rawClient as unknown as VcRequestClient); }
+    catch(e){await mutateTasks(file,l=>{const t=l.tasks.find(t=>t.id===task.id)!;t.state='blocked';t.note='任务文档未就绪：'+(e as Error).message;touchTask(t);});throw e;}
+    if ((await readTasks(file)).tasks.find(t=>t.id===task.id)?.state === 'cancelled' || (await readSchedules(dirname(controls.configPath))).runs.find(r=>r.id===run.id)?.state === 'cancelled') {await mutateTasks(file,l=>{const t=l.tasks.find(t=>t.id===task.id)!;t.state='cancelled';touchTask(t);});scheduleScopes.delete(base);return {taskFile:file,taskId:task.id};}
+    sessions.clear(scope);pending.block(scope);if(plan.mode==='single')pending.block(base);
+    const msg={messageId:marker.messageId,chatId:plan.chatId,chatType:'group',threadId:plan.threadId,senderId:plan.creator,senderType:'user',senderIsBot:false,mentionedBot:true,mentionAll:false,rawContentType:'text',content:`这是已确认的定时计划 ${plan.id} 的本次执行 ${run.id}。仅执行以下工作：\n${plan.prompt}\n不要创建新的定时计划。`,resources:[],mentions:[],createTime:Date.now()} as NormalizedMessage;
+    void runAgentBatch({channel,executor,sessions,sessionCatalog,workspaces,media,batch:[msg],controls,cotClient,callbackAuth,activePolicyFingerprints,lastRunModelByScope,scope,mode:plan.threadId?'topic':'group',scheduledSingle:plan.mode==='single'?{file,id:task.id}:undefined}).catch(async e=>{
+      await mutateTasks(file,l=>{const t=l.tasks.find(t=>t.id===task.id)!;if(t.state!=='cancelled')t.state='blocked';t.note=(e as Error).message;touchTask(t);});
+    }).then(async()=>{const current=(await readTasks(file)).tasks.find(t=>t.id===task.id);if(current?.state==='planning')await mutateTasks(file,l=>{const t=l.tasks.find(t=>t.id===task.id)!;t.state='blocked';t.note='本次执行未正常启动，请检查运行条件';touchTask(t);});}).catch(e=>log.warn('schedule','run-finalize-failed',{error:String(e)})).finally(()=>{scheduleScopes.delete(base);pending.unblock(scope);if(plan.mode==='single'){pending.unblock(base);sessions.clear(scope);}});
+    return {taskFile:file,taskId:task.id};
+    } catch(e) {scheduleScopes.delete(base);throw e;}
+  }, e=>log.warn('schedule','tick-failed',{error:String(e)}));
   const stopTaskDocuments = await startTaskDocuments(dirname(controls.configPath), controls.profile, channel, chatId => coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId]));
   const stopTaskDeadlines = await startTaskDeadlines(dirname(controls.configPath), controls.profile, channel, chatId => coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId]));
   const identity = channel.botIdentity;
@@ -534,6 +574,7 @@ export async function startChannel(deps: StartChannelDeps): Promise<BridgeChanne
       keepalive.stop();
       stopTaskDeadlines();
       stopTaskDocuments();
+      stopSchedules();
       // Stop meeting timers but stay in the meetings: /reconnect tears the
       // channel down and rebuilds it, and auto-leaving every meeting on a
       // reconnect would be surprising.
@@ -752,6 +793,8 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     return;
   }
 
+  if (!agentMessage) controls.meetingInvites?.observe(baseScope, emsg);
+
   // Group-mention policy. p2p is always unrestricted; in groups (regular and
   // topic) we drop messages that don't @bot when the user has opted into the
   // quiet-by-default behavior. A per-chat override (set from /config's group
@@ -770,6 +813,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     return;
   }
 
+  if (await scheduleCommand(dirname(controls.configPath), controls, channel, emsg)) return;
   const capabilityAssignment = assignmentOf([emsg]);
   if (capabilityAssignment && emsg.content.includes('[协作能力查询]')) {
     await channel.send(msg.chatId, {markdown:`[协作回执 ${capabilityAssignment.taskId} ${capabilityAssignment.stepId} 完成]\n本群能力描述：${JSON.stringify({role:boundGroup?.role,description:boundGroup?.rolePrompt || '未填写，请拥有者在软件中补充职责与能力边界；不能据名称推断能力',source:'当前群保存配置，权限尚需实际验证'})}`}, {replyTo:msg.messageId,...(chatMode==='topic'?{replyInThread:true}:{}),mentions:[{key:'@organizer',openId:msg.senderId,isBot:true}]});
@@ -837,11 +881,17 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     await channel.send(emsg.chatId, { markdown: `事项 ${review.id} ${review.state === 'pending' ? '等待负责人确认' : '已被拒绝，请修改方案并重新 /review request'}。当前会话暂不启动新任务；用 /review status 查看。` }, { replyTo: emsg.messageId });
     return;
   }
+  if (!agentMessage) {
+    await channel.send(emsg.chatId, { markdown: activeRuns.get(scope) ? '收到，已排队，上一项处理完就继续。' : '收到，正在处理…' },
+      { replyTo: emsg.messageId, ...(chatMode === 'topic' ? { replyInThread: true } : {}) })
+      .catch(err => log.warn('intake', 'ack-failed', { err: String(err) }));
+  }
   const size = pending.push(scope, emsg);
   log.info('intake', 'queued', { scope, queueSize: size, debounceMs: DEBOUNCE_MS });
 }
 
 interface RunBatchDeps {
+  scheduledSingle?: {file:string;id:string};
   channel: LarkChannel;
   executor: RunExecutor;
   sessions: SessionStore;
@@ -932,7 +982,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   // the user is pointing at. An already-engaged topic keeps that history in its
   // resumed session, so we skip the fetch there.
   let topicContext: QuotedContext[] = [];
-  if (mode === 'topic' && threadId && !sessions.getRaw(scope) && !assignmentOf(batch) && !coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId])) {
+  if (!deps.scheduledSingle && mode === 'topic' && threadId && !sessions.getRaw(scope) && !assignmentOf(batch) && !coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId])) {
     const exclude = new Set([...batchIds, ...quoteTargets]);
     topicContext = await fetchTopicContext(channel, threadId, {
       maxMessages: 40,
@@ -972,7 +1022,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   const assignment = assignmentOf(batch);
   const returnMention = handoffReturnMention(batch, assignment ? { ...coordinatorGroup, role: 'executor' } : coordinatorGroup);
   const teamFile = taskFile(dirname(controls.configPath), controls.profile, scope);
-  const teamTask = coordinatorEnabled(coordinatorGroup) && !assignment ? activeTask(await readTasks(teamFile)) : undefined;
+  const teamTask = !deps.scheduledSingle && coordinatorEnabled(coordinatorGroup) && !assignment ? activeTask(await readTasks(teamFile)) : undefined;
   if (teamTask) {
     try {
       const hadDocument = !!teamTask.document?.url;
@@ -1174,6 +1224,17 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     cotEnabled || replyMode === 'card' ? undefined : addWorkingReaction(channel, lastMsg.messageId);
 
   try {
+    if (deps.scheduledSingle) {
+      const tracked = deps.scheduledSingle;
+      const state = finalAnswerOnlyState(await processAgentStream(handle,eventStream,scope,idleTimeoutMs,recordSession,async()=>{}));
+      const text=renderText(state);
+      await mutateTasks(tracked.file,l=>{const t=l.tasks.find(t=>t.id===tracked.id)!;if(t.state!=='cancelled')t.state=state.terminal==='done'&&text.trim()&&!/^(?:\*\*)?(需要补充|阻塞|验收未通过)/.test(text.trim())?'completed':'blocked';t.summary=text||'没有返回执行结果';touchTask(t);});
+      const url=await syncTaskDocument(tracked.file,tracked.id,channel.rawClient as unknown as VcRequestClient);
+      const trackedTask=(await readTasks(tracked.file)).tasks.find(t=>t.id===tracked.id)!;
+      const result=await channel.send(chatId,{markdown:`${text}\n\n任务文档：${url}${trackedTask.state==='blocked'?'\n本次需要处理，计划将暂停。请在定时任务页面补充任务内容、结束本次后再恢复计划。':''}`},{...sendOpts,...(trackedTask.state==='blocked'?{mentions:[{key:'@requester',openId:trackedTask.requester,isBot:false}]}:{})});
+      requireMessageReceipt(result,'schedule-result');
+      return;
+    }
     if (teamTask || assignment) {
       const state = finalAnswerOnlyState(await processAgentStream(handle, eventStream, scope, idleTimeoutMs, recordSession, async () => {}));
       if (teamTask) {

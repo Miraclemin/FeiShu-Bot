@@ -38,6 +38,7 @@ interface FakeLarkChannel {
   botIdentity: { openId: string; name: string };
   handlers: MessageHandlerMap;
   sent: Array<{ chatId: string; content: unknown; options?: unknown }>;
+  acknowledgements: Array<{ chatId: string; content: unknown; options?: unknown }>;
   rawClient: {
     request: ReturnType<typeof vi.fn>;
     application: {
@@ -83,6 +84,15 @@ afterEach(async () => {
 });
 
 describe('markdown stream startup failures', () => {
+  it('acknowledges receipt and reports synchronous startup errors instead of silently dropping the request', async () => {
+    const h = await createHarness();
+    vi.spyOn(h.agent, 'run').mockImplementation(() => { throw new Error('本群选中的技能已移动或删除，请在工作台重新选择'); });
+    await startTestBridge(h);
+    await h.channel.handlers.message?.(message('om_missing_skill', '帮我查看'));
+    expect(JSON.stringify(h.channel.acknowledgements)).toContain('收到');
+    await waitFor(() => h.channel.sent.some(x => JSON.stringify(x.content).includes('技能已移动或删除')));
+    expect(lastMarkdown(h.channel)).toContain('❌');
+  });
   it('does not leave the IM queue blocked when the agent exits before stream producer starts', async () => {
     const h = await createHarness();
     await startTestBridge(h);
@@ -652,7 +662,13 @@ function createFakeLarkChannel(harnessOptions: {
     getConnectionStatus() {
       return { state: 'connected', reconnectAttempts: 0 };
     },
+    acknowledgements: [],
     async send(chatId, content, options) {
+      // Keep receipt-only messages separate from the answer delivery assertions.
+      if (/^收到，(?:正在处理|已排队)/.test((content as {markdown?:string}).markdown ?? '')) {
+        channel.acknowledgements.push({chatId,content,options});
+        return {messageId: `ack_${channel.acknowledgements.length}`};
+      }
       sent.push({ chatId, content, options });
       if (harnessOptions.send) return harnessOptions.send(chatId, content, options);
       return { messageId: `sent_${sent.length}` };
