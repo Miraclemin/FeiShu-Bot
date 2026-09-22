@@ -20,7 +20,7 @@ export function TeamTasks({profile,chatId}:{profile:string;chatId:string}) {
       {t.document?.url&&/^https:\/\/feishu\.cn\/docx\/[a-zA-Z0-9]+$/.test(t.document.url)&&<a className="text-primary underline" href={t.document.url} target="_blank" rel="noreferrer">打开任务文档</a>}
       {t.document?.error&&<p role="alert" className="text-sm text-destructive">文档同步待处理：{t.document.error}。修复后在群里 /team resume。</p>}
       <p className="text-xs text-muted-foreground">更新于 {new Date(t.updatedAt).toLocaleString()}</p>
-      {isActive(t)&&<><p className="text-xs text-muted-foreground">继续：在群里 @组织者 /team resume。取消只停止协调，不会强停已派出的 Agent。</p><Button size="sm" variant="outline" disabled={busy} onClick={async()=>{setBusy(true);try{await apiPost(url,{action:'cancel',id:t.id,storageKey:t.storageKey});await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>取消此任务并保留记录</Button></>}
+      {isActive(t)&&<><p className="text-xs text-muted-foreground">继续：在群里 @组织者 /team resume。取消只停止协调，不会强停已派出的 Bot。</p><Button size="sm" variant="outline" disabled={busy} onClick={async()=>{setBusy(true);try{await apiPost(url,{action:'cancel',id:t.id,storageKey:t.storageKey});await refresh();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>取消此任务并保留记录</Button></>}
       </div>
     </details>)}
   </div>;

@@ -105,13 +105,13 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
         <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回">
           <ArrowLeft />
         </Button>
-        <button aria-label={info?.avatarLocked ? "更换组织者人物头像" : "更换 Agent 头像"} title="更换头像" className="shrink-0 rounded-2xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setAvatarOpen(true)}><AgentAvatar profile={profile} avatarId={info?.avatarId} className="size-14" /></button>
+        <button aria-label={info?.avatarLocked ? "更换组织者人物头像" : "更换 Bot 头像"} title="更换头像" className="shrink-0 rounded-2xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setAvatarOpen(true)}><AgentAvatar profile={profile} avatarId={info?.avatarId} className="size-14" /></button>
         <div className="flex min-w-0 items-center gap-2">
           {editing ? <form className="flex flex-wrap gap-2" onSubmit={e => { e.preventDefault(); void saveName(); }}>
-            <Input aria-label="Agent 名称" autoFocus maxLength={80} value={draftName} disabled={renaming} onChange={e => setDraftName(e.target.value)} />
+            <Input aria-label="Bot 名称" autoFocus maxLength={80} value={draftName} disabled={renaming} onChange={e => setDraftName(e.target.value)} />
             <Button size="sm" disabled={renaming || !draftName.trim()}>{renaming ? '保存中…' : '保存'}</Button>
             <Button type="button" size="sm" variant="ghost" disabled={renaming} onClick={() => setEditing(false)}>取消</Button>
-          </form> : <><h1 className="text-2xl font-semibold break-all">{displayName}</h1><Button variant="ghost" size="icon" aria-label="编辑 Agent 名称" onClick={() => { setDraftName(displayName); setEditing(true); }}><Pencil /></Button></>}
+          </form> : <><h1 className="text-2xl font-semibold break-all">{displayName}</h1><Button variant="ghost" size="icon" aria-label="编辑 Bot 名称" onClick={() => { setDraftName(displayName); setEditing(true); }}><Pencil /></Button></>}
         </div>
         {info && <Badge variant="secondary">{info.agentKind}</Badge>}
         {running ? <Badge variant="success">在线</Badge> : <Badge variant="outline">未运行</Badge>}
@@ -128,7 +128,7 @@ export function ProfileDetail({ profile, onBack }: { profile: string; onBack: ()
 
       <Dialog open={avatarOpen} onOpenChange={open => { if (!avatarSaving) setAvatarOpen(open); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>给 Agent 换个头像</DialogTitle>
+          <DialogHeader><DialogTitle>给 Bot 换个头像</DialogTitle>
             <DialogDescription>{info?.avatarLocked ? "12 位农场家人，选择后固定保存，头像换一批不会更换组织者。" : "30 种小动物和 12 位农场家人，挑选喜欢的角色。保存后保持不变。"}仅更改本软件中的头像。</DialogDescription></DialogHeader>
           {!info?.avatarLocked && <Button variant="outline" disabled={avatarSaving} onClick={() => void saveAvatar('random')}>随机换一个</Button>}
           <div className="grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto p-1 sm:grid-cols-6">

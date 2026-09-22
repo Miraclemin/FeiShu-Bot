@@ -62,7 +62,7 @@ function WorkbenchApp() {
           <div className="flex justify-end gap-2 mb-4"><Button variant="outline" onClick={()=>{if(leaveGroup()){setGroupDirty(false);setScheduleOpen(true);}}}>定时任务</Button><Button onClick={()=>{if(leaveGroup()){setGroupDirty(false);setCreatingTeam(true);}}}>创建协作团队</Button><Button variant="outline" onClick={() => {if(leaveGroup()){setGroupDirty(false);setTeamOpen(true);}}}>团队资源 · 资料与 Skill</Button></div>
           <AgentOverview />
           <div className="flex gap-2 mb-5" role="group" aria-label="管理视角">
-            <Button variant={perspective==='agent'?'default':'outline'} aria-pressed={perspective==='agent'} onClick={()=>{if(groupDirty&&!window.confirm('设置尚未保存，放弃这些修改？'))return;setGroupDirty(false);setPerspective('agent');}}>Agent 视角</Button>
+            <Button variant={perspective==='agent'?'default':'outline'} aria-pressed={perspective==='agent'} onClick={()=>{if(groupDirty&&!window.confirm('设置尚未保存，放弃这些修改？'))return;setGroupDirty(false);setPerspective('agent');}}>Bot 视角</Button>
             <Button variant={perspective==='group'?'default':'outline'} aria-pressed={perspective==='group'} onClick={()=>setPerspective('group')}>群组视角</Button>
           </div>
           {perspective==='agent'?<ProfilesView onOpen={setSelected}/>:<GroupsView onOpenAgent={setSelected} onDirtyChange={setGroupDirty}/>}

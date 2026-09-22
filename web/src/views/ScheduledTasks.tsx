@@ -173,7 +173,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
       <div>
         <h1 className="text-2xl font-semibold">定时任务</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          一个 Agent 可在多个群或 Topic
+          一个 Bot 可在多个群或 Topic
           设置多个计划。电脑联网、未休眠，软件与机器人后台运行时执行。
         </p>
       </div>
@@ -195,7 +195,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              执行 Agent
+              执行 Bot
               <select
                 className={selectStyle}
                 value={profile}
@@ -248,7 +248,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
               value={mode}
               onChange={(e) => setMode(e.target.value as typeof mode)}
             >
-              <option value="single">单 Agent 执行</option>
+              <option value="single">单 Bot 执行</option>
               <option value="coordinator" disabled={!group?.coordinator}>
                 组织者协调团队
               </option>
@@ -326,7 +326,7 @@ export function ScheduledTasks({ onBack }: { onBack: () => void }) {
             <div className="rounded-lg bg-muted p-3 text-sm space-y-2">
               <p>
                 {data.profiles.find(p => p.name === profile)?.displayName || profile} → {group?.name} {edit?.threadId ? "（原 Topic）" : ""}{" "}
-                · {mode === "single" ? "单 Agent" : "组织者协调"}
+                · {mode === "single" ? "单 Bot" : "组织者协调"}
               </p>
               <p>
                 {kind === "once"

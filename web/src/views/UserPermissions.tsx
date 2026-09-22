@@ -34,9 +34,10 @@ export function UserPermissions({ profile, refreshKey }: { profile: string; refr
   }
   return <div id="user-permissions" className="space-y-3 border-t pt-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-medium">个人授权</h4>{status?.loggedIn && status.userName && <span className="text-xs text-muted-foreground">{status.userName}</span>}</div>
+    <p className="text-xs text-muted-foreground">个人授权按飞书应用分别保存，用于本机搜索人员和群；不代表机器人功能权限。</p>
     <div className="divide-y">{[['搜索人员', 'contact:user:search'], ['查看我的群', 'im:chat:read'], ['添加群成员（拉机器人进群）', 'im:chat.members:write_only']].map(([label, scope]) => {
       const ok = granted(scope!);
-      return <div key={scope} className="flex items-center justify-between gap-4 py-2.5 text-sm"><span className="text-muted-foreground">{label}</span><span className={`inline-flex shrink-0 items-center gap-1.5 ${ok ? 'text-emerald-600' : 'text-muted-foreground'}`}>{ok ? <CheckCircle2 className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" />}{status ? ok ? '已授权' : '未授权' : '未核验'}</span></div>;
+      return <div key={scope} className="flex items-center justify-between gap-4 py-2.5 text-sm"><span className="text-muted-foreground">{label}</span><span className={`inline-flex shrink-0 items-center gap-1.5 ${ok ? 'text-emerald-600' : 'text-muted-foreground'}`}>{ok ? <CheckCircle2 className="h-4 w-4" /> : <CircleDashed className="h-4 w-4" />}{status ? ok ? (status.tokenStatus === 'needs_refresh' ? '已授权 · 待刷新' : '已授权') : status.loggedIn ? '未授予此权限' : status.tokenStatus === 'expired' || status.tokenStatus === 'invalid' ? '需重新登录' : '本机未连接账号' : '未核验'}</span></div>;
     })}</div>
     {!login && !ready && <Button id="authorize-my-groups" variant="outline" disabled={busy || ready} onClick={authorize}>{busy ? '准备授权…' : ready ? '个人权限已授权' : '一次授权：人员搜索与群操作'}</Button>}
     {login && <div className="space-y-3 rounded-lg border bg-muted/20 p-4 text-center">

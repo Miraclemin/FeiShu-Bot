@@ -76,6 +76,6 @@ export function SkillPicker({ cwd, selected, onChange }: { cwd: string; selected
       <span className="text-xs text-muted-foreground">显示 {visible.length} 个技能</span>
       <Button size="sm" variant="ghost" disabled={!selectedIds.length} onClick={() => onChange([])}>清空本群技能</Button>
     </div>
-    <p className="text-xs text-muted-foreground">技能选择决定任务加载的技能，不限制 Agent 的本机文件访问权限。</p>
+    <p className="text-xs text-muted-foreground">技能选择决定任务加载的技能，不限制 Bot 的本机文件访问权限。</p>
   </section>;
 }

@@ -74,6 +74,7 @@ export interface KnownChat {
 /** Owner user-identity auth status (for the "我的群" picker). */
 export interface UserAuthStatus {
   loggedIn: boolean;
+  tokenStatus?: string;
   userName?: string;
   openId?: string;
   scopes: string[];

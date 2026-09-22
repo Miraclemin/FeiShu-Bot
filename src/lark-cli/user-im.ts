@@ -21,8 +21,9 @@ export interface UserImContext {
 }
 
 export interface UserAuthStatus {
-  /** User identity is authorized and its token is currently valid. */
+  /** User identity has a valid or refreshable authorization. */
   loggedIn: boolean;
+  tokenStatus?: string;
   userName?: string;
   openId?: string;
   /** Granted scope names (space-split from lark-cli). */
@@ -170,15 +171,17 @@ export async function getUserAuthStatus(
   ctx: UserImContext,
   exec: LarkCliExec = defaultExec,
 ): Promise<UserAuthStatus> {
-  const r = await exec(['auth', 'status', '--json'], larkCliEnv(ctx), 15_000);
+  const r = await exec(['auth', 'status', '--json', '--verify'], larkCliEnv(ctx), 15_000);
+  if (r.code !== 0 || r.timedOut) throw new Error('暂时无法检查个人授权，请重新检查');
   const json = parseJson(r.stdout);
   const user = isRecord(json) && isRecord(json.identities) ? json.identities.user : undefined;
-  if (!isRecord(user)) return { loggedIn: false, scopes: [] };
+  if (!isRecord(user)) throw new Error('未能读取个人授权状态，请重新检查');
   const loggedIn =
-    user.available === true && (user.tokenStatus === 'valid' || user.status === 'ready');
+    user.available === true && (user.tokenStatus === 'valid' || user.status === 'ready' || user.tokenStatus === 'needs_refresh' || user.status === 'needs_refresh');
   const scopes = typeof user.scope === 'string' ? user.scope.split(/\s+/).filter(Boolean) : [];
   return {
     loggedIn,
+    tokenStatus: typeof user.tokenStatus === 'string' ? user.tokenStatus : undefined,
     userName: typeof user.userName === 'string' ? user.userName : undefined,
     openId: typeof user.openId === 'string' ? user.openId : undefined,
     scopes,

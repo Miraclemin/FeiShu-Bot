@@ -4,7 +4,7 @@ import { CheckCircle2, CircleDashed, KeyRound, RefreshCw } from 'lucide-react';
 import { apiGet } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
-type Status = {status:string;message?:string;permissions?:string;meeting?:string;granted?:number;total?:number};
+type Status = {status:string;message?:string;permissions?:string;meeting?:string;granted?:number;total?:number;missing?:{scope:string;type:string}[]};
 type Desktop = {meetingSetupStatus?:(profile:string)=>Promise<{state:string;published?:boolean;missingScope?:boolean}|null>;setupPermissions?:(profile:string)=>Promise<{message:string}>;setupMeetingEvents?:(profile:string)=>Promise<{message:string}>};
 export function PermissionGuide({profile}:{profile:string}) {
  const [authRefresh,setAuthRefresh]=useState(0);
@@ -29,6 +29,7 @@ export function PermissionGuide({profile}:{profile:string}) {
    {row('功能权限',granted,granted?'已开通':status?.status==='checked'?`${status.granted} / ${status.total} 项已开通`:'未核验')}
    {row('会议事件',meeting,meeting?'已配置':'待核验')}
   </div>
+  {!!status?.missing?.length && <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-2"><p>当前已发布版本缺少以下权限：</p>{status.missing.map(item=><p key={item.type+item.scope} className="break-all">{item.scope === 'docs:permission.member:create' ? '添加文档协作者（分享协作手册） · ' : ''}{item.type==='tenant'?'机器人':'用户'}权限：{item.scope}</p>)}<p>若飞书后台已勾选，请确认修改已发布，再重新检查。</p></div>}
   <div className="flex items-center gap-2 border-t pt-3">
    <>{!ready && <Button disabled={busy||checking} onClick={setup}>{busy?'请在飞书窗口继续…':ready?'应用权限已开通':granted?'一键配置会议':'一键开通全部功能权限'}</Button>}</>
    <Button variant="ghost" size="sm" disabled={checking||busy} onClick={()=>{setMessage('');setAuthRefresh(x=>x+1);void refresh();}}><RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${checking?'animate-spin':''}`}/>重新检查</Button>

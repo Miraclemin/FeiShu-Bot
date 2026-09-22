@@ -160,7 +160,7 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
 
   if (phase === 'saving') return <div role="status" className="space-y-3 py-10 text-center">
     <CheckCircle2 className="mx-auto size-10 text-emerald-600" />
-    <p className="font-medium">已授权，正在保存 Agent…</p>
+    <p className="font-medium">已授权，正在保存 Bot…</p>
     <p className="text-sm text-muted-foreground">完成后自动关闭并进入配置</p>
     {pollError && <p className="text-sm text-destructive">{pollError}</p>}
   </div>;
@@ -172,7 +172,7 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
           <CheckCircle2 className="size-4" /> 应用已创建{botName ? `：${botName}` : ""}，确认后完成
         </div>
         <div className="space-y-1.5">
-          <Label>AI Agent</Label>
+          <Label>AI 引擎</Label>
           <Select value={agentKind} onValueChange={(v) => setAgentKind(v as AgentKind)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -181,7 +181,7 @@ function QrWizard({ onCreated, mode = 'new' }: { onCreated: (profile: string) =>
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>Agent 名称</Label>
+          <Label>Bot 名称</Label>
           <Input
             value={profileName}
             onChange={(e) => setProfileName(e.target.value)}

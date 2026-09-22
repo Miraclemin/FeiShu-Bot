@@ -64,7 +64,7 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
   return <div className="space-y-5">
     {!groupId && <><PermissionGuide key={profile} profile={profile} />
 
-    <Card><CardHeader className="flex-row justify-between"><CardTitle>运行这个机器人的 Agent</CardTitle><Button size="sm" variant="outline" onClick={detect}>重新检测</Button></CardHeader>
+    <Card><CardHeader className="flex-row justify-between"><CardTitle>运行 Bot 的 AI 引擎</CardTitle><Button size="sm" variant="outline" onClick={detect}>重新检测</Button></CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">飞书里的机器人保持不变。选择本机引擎，保存后自动切换；切换时开始新对话。</p>
         <div className="grid grid-cols-2 gap-3">{agents.map(a => <button key={a.kind} disabled={!a.installed || busy} onClick={() => setSettings({ ...settings, agentKind: a.kind })}
@@ -73,7 +73,7 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
           <div className="text-xs text-muted-foreground mt-2">{a.installed ? '已检测到 · 登录状态待运行验证' : '未安装'}</div>
         </button>)}</div>
         <div className="space-y-2"><Label htmlFor="execution">电脑执行权限</Label><select id="execution" className="w-full border rounded-md p-2 bg-background" value={settings.accessMode} onChange={e => setSettings({ ...settings, accessMode: e.target.value })}>
-          <option value="read-only">只读（由支持的 CLI 执行）</option><option value="workspace">限制写入工作目录</option><option value="full">本机完整权限（使用本机 Agent 的工具与凭据）</option>
+          <option value="read-only">只读（由支持的 CLI 执行）</option><option value="workspace">限制写入工作目录</option><option value="full">本机完整权限（使用本机 AI 引擎的工具与凭据）</option>
         </select><p className="text-xs text-muted-foreground">Hermes / OpenClaw 当前只支持明确选择“本机完整权限”。所有成员共享此处配置的执行能力。工作目录不是文件读取隔离，资料链接也不是严格访问白名单。</p></div>
       </CardContent></Card></>}
     <Card><CardHeader><CardTitle>群与工作空间</CardTitle></CardHeader><CardContent className="space-y-4">
@@ -90,7 +90,7 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
               <Label htmlFor="group-enabled" className="text-base font-semibold cursor-pointer">在这个群启用</Label>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${group.enabled ? 'bg-primary/10 text-primary' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{group.enabled ? '开关已开启' : '开关已关闭'}</span>
             </div>
-            <p id="group-enabled-hint" className="text-xs text-muted-foreground">{group.enabled ? '允许 Agent 响应本群任务。' : '关闭时，Agent 不响应本群任务。'}修改后点击下方“保存群与 Agent 设置”生效。</p>
+            <p id="group-enabled-hint" className="text-xs text-muted-foreground">{group.enabled ? '允许 Bot 响应本群任务。' : '关闭时，Bot 不响应本群任务。'}修改后点击下方“保存群与 Bot 设置”生效。</p>
           </div>
           <Switch id="group-enabled" aria-describedby="group-enabled-hint" className="shrink-0 scale-110" checked={group.enabled} onCheckedChange={enabled => patchGroup({ enabled })} />
         </div>
@@ -106,7 +106,7 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
           patchGroup({ ...value, skills: [...new Set([...(group.skills ?? []), ...basic])] }); setConnection(null);
         }} />
         {group.role === 'coordinator' && <div className="rounded-xl border bg-primary/5 p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3"><div><Label htmlFor="coordination-enabled" className="font-semibold">组织者模式</Label><p className="text-xs text-muted-foreground mt-1">开启：登记分工、收集结果、汇总归档。关闭：直接对话，各 Agent 仍可独立使用。</p></div><Switch id="coordination-enabled" checked={group.coordinationEnabled !== false} onCheckedChange={coordinationEnabled=>patchGroup({coordinationEnabled})}/></div>
+          <div className="flex items-center justify-between gap-3"><div><Label htmlFor="coordination-enabled" className="font-semibold">组织者模式</Label><p className="text-xs text-muted-foreground mt-1">开启：登记分工、收集结果、汇总归档。关闭：直接对话，各 Bot 仍可独立使用。</p></div><Switch id="coordination-enabled" checked={group.coordinationEnabled !== false} onCheckedChange={coordinationEnabled=>patchGroup({coordinationEnabled})}/></div>
           <p className="text-sm">群里直接 @组织者说目标即可，自动拆分、澄清、交接和验收；简单问题直接回答。修改开关后保存生效。</p>
           <TeamTasks key={profile+selected} profile={profile} chatId={selected}/>
         </div>}
@@ -114,7 +114,7 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
         {([['name','项目名称','例如：我的产品'],['url','产品网址（选填）','https://']] as const).map(([key,label,placeholder]) => <div key={key}><Label htmlFor={'project-'+key}>{label}</Label><Input id={'project-'+key} placeholder={placeholder} value={project[key]} onChange={e=>patchGroup({project:{...project,[key]:e.target.value}})} /></div>)}
         {group.role === 'coordinator' && group.coordinationEnabled !== false && <><div className="space-y-2"><Label htmlFor="experience-doc">项目经验文档（选填）</Label>
           <Input id="experience-doc" value={group.experienceDoc ?? ''} placeholder="https://你的企业.feishu.cn/docx/…" onChange={e => patchGroup({experienceDoc:e.target.value})} />
-          <p className="text-xs text-muted-foreground">由组织者统一读取和维护，派发时只附相关经验。普通 Agent 返回经验建议；经负责人明确确认再归档。需要可用的 lark-doc 技能和文档权限；此规则不是程序强制审批。</p>
+          <p className="text-xs text-muted-foreground">由组织者统一读取和维护，派发时只附相关经验。普通 Bot 返回经验建议；经负责人明确确认再归档。需要可用的 lark-doc 技能和文档权限；此规则不是程序强制审批。</p>
           <Button size="sm" variant="outline" onClick={()=>{const ids=catalog.filter(x=>['lark-doc','lark-im','lark-shared'].includes(x.name)).map(x=>x.id);patchGroup({skills:[...new Set([...(group.skills??[]),...ids])]});toast.info(ids.length===3?'已勾选文档与群聊技能，请保存设置':'已勾选找到的技能，缺失的技能需先安装');}}>勾选经验协作所需技能</Button>
         </div>
         <div className="space-y-2"><Label htmlFor="coordinator-doc">本群协作手册（组织者使用）</Label>
@@ -123,7 +123,7 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
           <Button size="sm" variant="outline" disabled={busy} onClick={async()=>{setBusy(true);try{const saved=await apiPost<Settings>(endpoint,settings);setSettings(saved);const r=await apiPost<{url:string;teamCompleted?:boolean}>(`/api/workbench/coordinator-handbook?profile=${encodeURIComponent(profile)}`,{chatId:selected});if(r.teamCompleted){setSettings(await apiGet<Settings>(endpoint));toast.success('协作团队已完成绑定、启用和群内通知');onApplied();}else{saved.workbench.groups[selected]!.coordinatorDoc=r.url;setSettings(await apiPost<Settings>(endpoint,saved));toast.success('手册已绑定并保存');onApplied();}}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}}}>创建或找回本群协作手册</Button>
         </div>
         </>}
-        {group.role !== 'coordinator' && <p className="text-sm text-muted-foreground">团队规则与项目经验由组织者管理，派发任务时附上所需上下文。本 Agent 负责执行并反馈结果与经验建议，无需绑定手册。</p>}
+        {group.role !== 'coordinator' && <p className="text-sm text-muted-foreground">团队规则与项目经验由组织者管理，派发任务时附上所需上下文。本 Bot 负责执行并反馈结果与经验建议，无需绑定手册。</p>}
         <BaseTablePicker profile={profile} appId={settings.appId} tenant={settings.tenant} onAdd={urls=>{patchGroup({resources:[...new Set([...(group.resources ?? [project.requirements,project.bugs].filter(Boolean)),...urls])]});setConnection(null);}} />
         <ResourceSharing name={group.name || project.name} links={group.resources ?? [project.requirements,project.bugs].filter(Boolean)} onAdd={resources=>{patchGroup({resources});setConnection(null);}} />
         <ResourceList profile={profile} links={group.resources ?? [project.requirements,project.bugs].filter(Boolean)} onChange={resources=>{patchGroup({resources});setConnection(null);}} />
@@ -138,6 +138,6 @@ export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyCh
     {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
     {message && <p role="status" className="text-sm">{message}</p>}
     {advanced}
-    <div className="sticky bottom-0 rounded-xl border bg-background/95 p-4 flex items-center justify-between gap-4"><span className="text-xs text-muted-foreground">配置版本 {settings.workbench.revision} · 保存时检查运行状态</span><Button disabled={busy} onClick={save}>{busy ? '应用中…' : groupId ? '保存本群设置' : '保存群与 Agent 设置'}</Button></div>
+    <div className="sticky bottom-0 rounded-xl border bg-background/95 p-4 flex items-center justify-between gap-4"><span className="text-xs text-muted-foreground">配置版本 {settings.workbench.revision} · 保存时检查运行状态</span><Button disabled={busy} onClick={save}>{busy ? '应用中…' : groupId ? '保存本群设置' : '保存群与 Bot 设置'}</Button></div>
   </div>;
 }

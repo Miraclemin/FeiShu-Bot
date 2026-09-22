@@ -182,7 +182,7 @@ export function ConfigView({ profile }: { profile: string }) {
             机器人身份：使用应用已获批的接口权限和机器人可见的资料。例如读取已分享给机器人的项目文档。它仍可能读到敏感资料，并不代表所有群成员都有权查看。
           </p>
           <p className="text-xs text-muted-foreground">账号身份：代表扫码授权的那个账号，不是当前 @ 机器人的人，也不自动等于机器人的创建者。例如：你扫码后，机器人使用你的权限；你无权读取的文档，它用你的身份也不能读取。若张三单独扫码，则该次绑定代表张三。实际访问还受应用已开通的接口和用户同意范围限制。若李四仅仅 @ 机器人，并不会自动变成李四的权限。若允许他人借用你的授权，仍可能泄露你的文档；不能用一个共享授权冒充每位请求者的权限。</p>
-          <p className="text-xs text-muted-foreground">工作台固定使用机器人身份；创建者管理配置，成员共享已配置的机器人能力。用于搜索人和群的账号授权只服务于本机配置，不自动开放给群里的 Agent。</p>
+          <p className="text-xs text-muted-foreground">工作台固定使用机器人身份；创建者管理配置，成员共享已配置的机器人能力。用于搜索人和群的账号授权只服务于本机配置，不自动开放给群里的 Bot。</p>
           {team && (
             <p className="text-xs text-primary">⚠️ 团队版已开启：本项被覆盖为「只允许应用身份」。切回个人版后恢复。</p>
           )}
@@ -199,7 +199,7 @@ export function ConfigView({ profile }: { profile: string }) {
           try {
             const next = await apiPost<ConfigData>(`/api/config?profile=${encodeURIComponent(profile)}`, { meeting: cfg.meeting });
             setCfg(current => current ? { ...current, meeting: next.meeting } : current);
-            toast.success(next.live ? "会议设置已保存并应用" : "会议设置已保存，启动 Agent 后生效");
+            toast.success(next.live ? "会议设置已保存并应用" : "会议设置已保存，启动 Bot 后生效");
           } catch (e) { toast.error((e as Error).message); }
           finally { setSaving(false); }
         }}
@@ -420,7 +420,7 @@ function MeetingCard({ profile, cfg, onChange, onSave, saving }: {
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
           让 bot 作为参会人加入飞书会议，读字幕/弹幕并作答。需要应用已开通内测与
-          <span className="font-mono"> vc:meeting.bot.join:write</span>。修改后点击“保存会议设置并应用”，在线 Agent 会自动重连。
+          <span className="font-mono"> vc:meeting.bot.join:write</span>。修改后点击“保存会议设置并应用”，在线 Bot 会自动重连。
         </p>
 
         <Button disabled={saving} onClick={async () => { await onSave(); await load(); }}>{saving ? "应用中…" : "保存会议设置并应用"}</Button>

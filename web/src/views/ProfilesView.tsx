@@ -96,12 +96,12 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">我的 Agent</h1>
+          <h1 className="text-2xl font-semibold">我的 Bot</h1>
           <p className="text-sm text-muted-foreground">让你的本机 AI 在飞书群里工作</p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={shuffling || !profiles?.length} onClick={() => void shuffleAvatars()}>{shuffling ? '更换中…' : '头像换一批'}</Button>
-          <Button onClick={() => setCreating(true)}>新建 Agent</Button>
+          <Button onClick={() => setCreating(true)}>新建 Bot</Button>
         </div>
       </div>
       {error && <p className="text-destructive text-sm">加载失败：{error}</p>}
@@ -109,7 +109,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
       <div className="space-y-2">
         {profiles?.length === 0 && (
           <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-            暂无 Agent，点「新建 Agent」开始。
+            暂无 Bot，点「新建 Bot」开始。
           </p>
         )}
         {profiles?.map((p) => (
@@ -151,7 +151,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
           <DialogHeader>
             <DialogTitle>删除 {deleteTarget?.displayName || deleteTarget?.name}？</DialogTitle>
             <DialogDescription>
-              将停止这个 Agent 并移除本机绑定。飞书应用、群聊和项目文件会保留，之后可重新绑定。
+              将停止这个 Bot 并移除本机绑定。飞书应用、群聊和项目文件会保留，之后可重新绑定。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -164,7 +164,7 @@ export function ProfilesView({ onOpen }: { onOpen: (profile: string) => void }) 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新建 Agent</DialogTitle>
+            <DialogTitle>新建 Bot</DialogTitle>
           </DialogHeader>
           <OnboardWizard
             onCreated={(name) => {

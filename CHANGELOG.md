@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- 界面统一使用 Bot，群列表隐藏群 ID，详情可展开查看。
+- 个人授权联网核验，凭证待刷新不再误报未授权；检查失败单独提示。
+- 展示已发布版本缺少的具体应用权限，提示勾选后需发布生效。
+
+
 ## 0.8.0-preview.8 - 2026-09-22
 
 - 软件更名为 FeiShu Bot，GitHub 仓库更名为 Miraclemin/FeiShu-Bot，保留现有配置和 Skill 目录。

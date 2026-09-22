@@ -58,6 +58,31 @@ describe('user-im lark-cli helpers', () => {
     expect(status.scopes).toEqual([]);
   });
 
+  it('keeps a refreshable grant authorized instead of asking for consent again', async () => {
+    const exec = stub(() => ({ stdout: JSON.stringify({ identities: { user: {
+      available: true, status: 'needs_refresh', tokenStatus: 'needs_refresh',
+      scope: 'contact:user:search im:chat:read im:chat.members:write_only',
+    } } }) }));
+    const status = await getUserAuthStatus(ctx, exec);
+    expect(status.loggedIn).toBe(true);
+    expect(status.tokenStatus).toBe('needs_refresh');
+    expect(status.scopes).toContain('contact:user:search');
+    expect(exec).toHaveBeenCalledWith(expect.arrayContaining(['--verify']), expect.any(Object), 15000);
+  });
+
+  it('does not present command failure or malformed status as missing permission', async () => {
+    await expect(getUserAuthStatus(ctx, stub(() => ({ code: 1 })))).rejects.toThrow('无法检查');
+    await expect(getUserAuthStatus(ctx, stub(() => ({ stdout: '{}' })))).rejects.toThrow('未能读取');
+  });
+
+  it('does not treat an expired login as usable', async () => {
+    const status = await getUserAuthStatus(ctx, stub(() => ({ stdout: JSON.stringify({ identities: { user: {
+      available: true, status: 'expired', tokenStatus: 'expired', scope: 'im:chat:read',
+    } } }) })));
+    expect(status.loggedIn).toBe(false);
+    expect(status.tokenStatus).toBe('expired');
+  });
+
   it('starts the device flow with explicit --scope (never --domain im) and extracts URL + code', async () => {
     const exec = stub((args) => {
       // Must request specific scopes, not the whole im domain (which pulls in

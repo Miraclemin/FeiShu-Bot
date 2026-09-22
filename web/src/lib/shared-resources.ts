@@ -8,5 +8,5 @@ export function sharedResourceLinks(text: string): string[] {
   return links;
 }
 export function resourceShareText(name: string, links: string[]) {
-  return `【${name || '团队'} · 共享资料】\n${links.join('\n')}\n\n在 feishu-collaborator 中打开对应 Agent → 选择群 → 从飞书导入资料清单，粘贴以上内容。检查访问权限并保存后，Agent 可按需读取原文。新增链接需要再次导入；飞书授权独立配置。`;
+  return `【${name || '团队'} · 共享资料】\n${links.join('\n')}\n\n在 FeiShu Bot 中打开对应 Bot → 选择群 → 从飞书导入资料清单，粘贴以上内容。检查访问权限并保存后，Bot 可按需读取原文。新增链接需要再次导入；飞书授权独立配置。`;
 }
