@@ -20,13 +20,14 @@ interface Inventory { kind: AgentKind; label: string; installed: boolean; binary
 interface Group { coordinationEnabled?: boolean; coordinatorDoc?: string; experienceDoc?: string; resources?: string[]; role?: string; rolePrompt?: string; project?: { name: string; url: string; requirements: string; bugs: string }; skillIsolation?: 'strict' | 'catalog'; enabled: boolean; name: string; workspace: string; persona: string; documents: string[]; skills?: string[]; }
 interface Settings { appId?: string; tenant?: string; agentKind: AgentKind; accessMode: string; protected: boolean; workbench: { revision: number; protectDocuments: true; groups: Record<string, Group> }; }
 const area = 'w-full rounded-md border bg-background p-3 text-sm min-h-24';
-export function WorkbenchView({ profile, onApplied, advanced }: { profile: string; onApplied: () => void; advanced?: ReactNode }) {
+export function WorkbenchView({ profile, onApplied, advanced, groupId, onDirtyChange }: { profile: string; onApplied: () => void; advanced?: ReactNode; groupId?: string; onDirtyChange?: (dirty: boolean) => void }) {
+  const [saved, setSaved] = useState('');
   const [agents, setAgents] = useState<Inventory[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(groupId ?? '');
   const [known, setKnown] = useState<{ id: string; name: string }[]>([]);
   const [catalog, setCatalog] = useState<{id:string;name:string}[]>([]);
   const [connection, setConnection] = useState<{checks:{label:string;ok:boolean;message:string}[];note:string}|null>(null);
@@ -37,9 +38,10 @@ export function WorkbenchView({ profile, onApplied, advanced }: { profile: strin
   useEffect(() => {
     void detect();
     apiGet<{skills:{id:string;name:string}[]}>('/api/skills').then(x => setCatalog(x.skills)).catch(() => {});
-    apiGet<Settings>(endpoint).then(setSettings).catch(e => setError(e.message));
+    apiGet<Settings>(endpoint).then(value => { setSettings(value); setSaved(JSON.stringify(value)); }).catch(e => setError(e.message));
     apiGet<{ chats: { id: string; name: string }[] }>(`/api/chats?profile=${encodeURIComponent(profile)}`).then(x => setKnown(x.chats)).catch(() => {});
   }, [profile]);
+  useEffect(() => { onDirtyChange?.(!!settings && !!saved && JSON.stringify(settings) !== saved); }, [settings, saved, onDirtyChange]);
   if (!settings) return <p>{error || '读取工作台配置…'}</p>;
   const group = settings.workbench.groups[selected];
   const patchGroup = (patch: Partial<Group>) => setSettings({ ...settings, workbench: { ...settings.workbench,
@@ -54,13 +56,13 @@ export function WorkbenchView({ profile, onApplied, advanced }: { profile: strin
     setBusy(true); setError('');
     try {
       let result = await apiPost<Settings & { message: string }>(endpoint, settings);
-      setSettings(result); setMessage(result.message); toast.success(result.message); onApplied();
+      setSettings(result); setSaved(JSON.stringify(result)); setMessage(result.message); toast.success(result.message); onApplied();
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
   const project = group?.project ?? { name: '', url: '', requirements: '', bugs: '' };
   return <div className="space-y-5">
-    <PermissionGuide key={profile} profile={profile} />
+    {!groupId && <><PermissionGuide key={profile} profile={profile} />
 
     <Card><CardHeader className="flex-row justify-between"><CardTitle>运行这个机器人的 Agent</CardTitle><Button size="sm" variant="outline" onClick={detect}>重新检测</Button></CardHeader>
       <CardContent className="space-y-4">
@@ -73,13 +75,14 @@ export function WorkbenchView({ profile, onApplied, advanced }: { profile: strin
         <div className="space-y-2"><Label htmlFor="execution">电脑执行权限</Label><select id="execution" className="w-full border rounded-md p-2 bg-background" value={settings.accessMode} onChange={e => setSettings({ ...settings, accessMode: e.target.value })}>
           <option value="read-only">只读（由支持的 CLI 执行）</option><option value="workspace">限制写入工作目录</option><option value="full">本机完整权限（使用本机 Agent 的工具与凭据）</option>
         </select><p className="text-xs text-muted-foreground">Hermes / OpenClaw 当前只支持明确选择“本机完整权限”。所有成员共享此处配置的执行能力。工作目录不是文件读取隔离，资料链接也不是严格访问白名单。</p></div>
-      </CardContent></Card>
+      </CardContent></Card></>}
     <Card><CardHeader><CardTitle>群与工作空间</CardTitle></CardHeader><CardContent className="space-y-4">
       <p className="text-sm text-muted-foreground">每个群单独选择目录与人格。拉进群后还需启用；没有配置的群不会执行任务。</p>
-      {known.length > 0 && <select aria-label="选择已加入的群" className="w-full border rounded-md p-2 bg-background" value="" onChange={e => addGroup(e.target.value, known.find(k => k.id === e.target.value)?.name)}>
+      {!groupId && <>{known.length > 0 && <select aria-label="选择已加入的群" className="w-full border rounded-md p-2 bg-background" value="" onChange={e => addGroup(e.target.value, known.find(k => k.id === e.target.value)?.name)}>
         <option value="">选择机器人已加入的群…</option>{known.map(k => <option key={k.id} value={k.id}>{k.name || k.id}</option>)}</select>}
       <Button variant="outline" onClick={() => setPickerOpen(true)}>搜索并选择群</Button><GroupPicker onAuthorize={() => { setPickerOpen(false); requestAnimationFrame(() => { document.getElementById('user-permissions')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.getElementById('authorize-my-groups')?.focus({ preventScroll: true }); }); }} profile={profile} open={pickerOpen} onOpenChange={setPickerOpen} added={Object.keys(settings.workbench.groups)} onPick={addGroup} />
       <div className="flex flex-wrap gap-2">{Object.entries(settings.workbench.groups).map(([id, g]) => <Button key={id} variant={id === selected ? 'default' : 'outline'} size="sm" onClick={() => setSelected(id)}>{g.name || id.slice(0, 16)} · {g.enabled ? '启用' : '暂停'}</Button>)}</div>
+      </>}
       {group ? <div key={JSON.stringify([profile, selected])} className="space-y-4 rounded-xl border p-4">
         <div className={`flex items-center justify-between gap-4 rounded-xl border-2 p-4 ${group.enabled ? 'border-primary/40 bg-primary/5' : 'border-amber-400/50 bg-amber-50 dark:bg-amber-950/20'}`}>
           <div className="space-y-1">
@@ -135,6 +138,6 @@ export function WorkbenchView({ profile, onApplied, advanced }: { profile: strin
     {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
     {message && <p role="status" className="text-sm">{message}</p>}
     {advanced}
-    <div className="sticky bottom-0 rounded-xl border bg-background/95 p-4 flex items-center justify-between gap-4"><span className="text-xs text-muted-foreground">配置版本 {settings.workbench.revision} · 保存时检查运行状态</span><Button disabled={busy} onClick={save}>{busy ? '应用中…' : '保存群与 Agent 设置'}</Button></div>
+    <div className="sticky bottom-0 rounded-xl border bg-background/95 p-4 flex items-center justify-between gap-4"><span className="text-xs text-muted-foreground">配置版本 {settings.workbench.revision} · 保存时检查运行状态</span><Button disabled={busy} onClick={save}>{busy ? '应用中…' : groupId ? '保存本群设置' : '保存群与 Agent 设置'}</Button></div>
   </div>;
 }

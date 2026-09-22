@@ -15,7 +15,7 @@ function installMenuBar() {
   const icon = nativeImage.createFromPath(join(__dirname, '..', 'resources', 'branding', 'owlTrayTemplate.png'));
   icon.setTemplateImage(true);
   tray = new Tray(icon);
-  tray.setToolTip('feishu-collaborator · 关闭窗口后继续运行');
+  tray.setToolTip('FeiShu Bot · 关闭窗口后继续运行');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开工作台', click: showWorkbench },
     { label: '隐藏窗口', click: () => window?.hide() },
@@ -30,6 +30,8 @@ function augmentPath() {
   try { for (const v of readdirSync(join(home, '.nvm', 'versions', 'node')).sort((a,b) => b.localeCompare(a, undefined, { numeric: true }))) dirs.push(join(home, '.nvm', 'versions', 'node', v, 'bin')); } catch {}
   process.env.PATH = [...new Set([...(process.env.PATH || '').split(delimiter), ...dirs])].filter(Boolean).join(delimiter);
 }
+// Preserve the original Electron session and single-instance directory after rebranding.
+app.setPath('userData', join(app.getPath('appData'), 'feishu-collaborator'));
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', showWorkbench);
@@ -43,7 +45,7 @@ else {
     host = await startDesktopHost(process.env.LARK_WORKBENCH_HOME || join(homedir(), '.lark-workbench'));
     if (process.platform === 'darwin') app.dock?.setIcon(join(__dirname, '..', 'resources', 'branding', 'icon.png'));
     window = new BrowserWindow({ width: 1100, height: 840, minWidth: 760, minHeight: 600,
-      title: 'feishu-collaborator', icon: join(__dirname, '..', 'resources', 'branding', 'icon.png'), backgroundColor: '#ffffff',
+      title: 'FeiShu Bot', icon: join(__dirname, '..', 'resources', 'branding', 'icon.png'), backgroundColor: '#ffffff',
       webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     installMenuBar();
     window.on('close', event => {

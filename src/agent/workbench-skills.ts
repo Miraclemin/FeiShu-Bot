@@ -6,7 +6,6 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as yaml } from 'yaml';
 import JSON5 from 'json5';
 import { parse as tomlParse, stringify as tomlStringify } from 'smol-toml';
-import type { AgentKind } from './catalog';
 export interface WorkbenchSkill { legacyId?: string; id: string; name: string; description: string; path: string; }
 export interface SkillSelection { ids: string[]; }
 /** Read metadata only; never execute skill scripts while discovering. */

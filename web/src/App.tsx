@@ -1,3 +1,4 @@
+import { GroupsView } from './views/GroupsView';
 import { ScheduledTasks } from './views/ScheduledTasks';
 import { CreateTeam } from './views/CreateTeam';
 import { TeamResources } from './views/TeamResources';
@@ -16,9 +17,12 @@ export function App() {
 }
 
 function WorkbenchApp() {
+  const [perspective, setPerspective] = useState<'agent'|'group'>('agent');
+  const [groupDirty, setGroupDirty] = useState(false);
   const [scheduleOpen,setScheduleOpen]=useState(false);
   const [creatingTeam,setCreatingTeam]=useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
+  const leaveGroup = () => !groupDirty || window.confirm('设置尚未保存，放弃这些修改？');
   const [onboard, setOnboard] = useState<OnboardState | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -37,7 +41,7 @@ function WorkbenchApp() {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh(); const timer=setInterval(()=>{void apiGet<Status>('/api/status').then(setStatus).catch(()=>{});},5000); return ()=>clearInterval(timer); }, [refresh]);
   useEffect(() => {
     const icon = document.createElement('link');
     icon.rel = 'icon'; icon.type = 'image/png'; icon.href = appMascot;
@@ -55,12 +59,17 @@ function WorkbenchApp() {
         <ProfileDetail profile={selected} onBack={() => { setSelected(null); void refresh(); }} />
       ) : (
         <>
-          <div className="flex justify-end gap-2 mb-4"><Button variant="outline" onClick={()=>setScheduleOpen(true)}>定时任务</Button><Button onClick={()=>setCreatingTeam(true)}>创建协作团队</Button><Button variant="outline" onClick={() => setTeamOpen(true)}>团队资源 · 资料与 Skill</Button></div>
+          <div className="flex justify-end gap-2 mb-4"><Button variant="outline" onClick={()=>{if(leaveGroup()){setGroupDirty(false);setScheduleOpen(true);}}}>定时任务</Button><Button onClick={()=>{if(leaveGroup()){setGroupDirty(false);setCreatingTeam(true);}}}>创建协作团队</Button><Button variant="outline" onClick={() => {if(leaveGroup()){setGroupDirty(false);setTeamOpen(true);}}}>团队资源 · 资料与 Skill</Button></div>
           <AgentOverview />
-          <ProfilesView onOpen={setSelected} />
+          <div className="flex gap-2 mb-5" role="group" aria-label="管理视角">
+            <Button variant={perspective==='agent'?'default':'outline'} aria-pressed={perspective==='agent'} onClick={()=>{if(groupDirty&&!window.confirm('设置尚未保存，放弃这些修改？'))return;setGroupDirty(false);setPerspective('agent');}}>Agent 视角</Button>
+            <Button variant={perspective==='group'?'default':'outline'} aria-pressed={perspective==='group'} onClick={()=>setPerspective('group')}>群组视角</Button>
+          </div>
+          {perspective==='agent'?<ProfilesView onOpen={setSelected}/>:<GroupsView onOpenAgent={setSelected} onDirtyChange={setGroupDirty}/>}
+
           {status && (
             <p className="mt-6 text-xs text-muted-foreground">
-              feishu-collaborator · v{status.version} · {status.online} 个在线 · 按机器人管理连接与工作空间
+              FeiShu Bot · v{status.version} · {status.online} 个在线 · 按机器人管理连接与工作空间
             </p>
           )}
         </>

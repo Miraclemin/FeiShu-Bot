@@ -1,3 +1,4 @@
+import { listWorkbenchGroups } from './groups';
 import { schedulesApi } from '../schedule/api';
 import { shuffleProfileAvatars } from './fleet';
 import { readdir } from 'node:fs/promises';
@@ -156,6 +157,8 @@ async function route(
     });
     return;
   }
+
+  if (path === '/api/groups' && g) { sendJson(res, 200, await listWorkbenchGroups(sup, deps.rootDir)); return; }
 
   if (path === '/api/agents' && g) { sendJson(res, 200, { agents: await agentInventory() }); return; }
   if (path === '/api/workbench/resource-names' && p) {

@@ -1,6 +1,6 @@
 appId: com.miraclemin.feishu-collaborator
-productName: feishu-collaborator
-artifactName: feishu-collaborator-${version}-${os}-${arch}.${ext}
+productName: FeiShu Bot
+artifactName: FeiShu-Bot-${version}-${os}-${arch}.${ext}
 extraMetadata:
   main: desktop/main.cjs
 files:

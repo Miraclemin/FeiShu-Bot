@@ -11,7 +11,7 @@ async function boot(platform = 'darwin') {
   const host = { url: 'http://localhost:1234', close: () => { closes++; return hostClosed; } };
   const app = new EventEmitter();
   let exited = false;
-  Object.assign(app, { requestSingleInstanceLock: () => true, whenReady: async () => {}, dock: { setIcon() {} }, quit() { const event = { prevented: false, preventDefault() { this.prevented = true; } }; app.emit('before-quit', event); if (!event.prevented) exited = true; } });
+  Object.assign(app, { getPath: () => '/test/appData', setPath: (key, value) => { app.savedPath = { key, value }; }, requestSingleInstanceLock: () => true, whenReady: async () => {}, dock: { setIcon() {} }, quit() { const event = { prevented: false, preventDefault() { this.prevented = true; } }; app.emit('before-quit', event); if (!event.prevented) exited = true; } });
   class Window extends EventEmitter {
     constructor() { super(); window = this; this.visible = true; this.minimized = false; this.webContents = new EventEmitter(); Object.assign(this.webContents, { setWindowOpenHandler() {}, session: { setPermissionRequestHandler() {} } }); }
     hide() { this.visible = false; }
@@ -63,4 +63,10 @@ test('Windows retains existing close-to-quit behavior', async () => {
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(b.closes(), 1);
   b.releaseClose();
+});
+
+test('Rebranding preserves the original user-data directory', async () => {
+  const b = await boot();
+  assert.equal(b.app.savedPath.key, 'userData');
+  assert.equal(b.app.savedPath.value, path.join('/test/appData', 'feishu-collaborator'));
 });

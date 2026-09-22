@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="resources/branding/icon.png" width="112" alt="Feishu Collaborator 应用图标">
+  <img src="resources/branding/icon.png" width="112" alt="FeiShu Bot 应用图标">
 </p>
 
-<h1 align="center">Feishu Collaborator</h1>
+<h1 align="center">FeiShu Bot</h1>
 
 <p align="center"><strong>让你电脑上的 AI Agent，在飞书群里参与项目工作。</strong></p>
 <p align="center">连接飞书、本机 Agent 与项目资料，把任务入口放在日常沟通的地方。</p>
 
 <p align="center">
-  <a href="https://github.com/Miraclemin/feishu-collaborator/releases"><img src="https://img.shields.io/badge/Download-macOS%20%7C%20Windows-2563eb?style=flat-square" alt="下载 macOS 和 Windows 客户端"></a>
+  <a href="https://github.com/Miraclemin/FeiShu-Bot/releases"><img src="https://img.shields.io/badge/Download-macOS%20%7C%20Windows-2563eb?style=flat-square" alt="下载 macOS 和 Windows 客户端"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-15803d?style=flat-square" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Agent-Runs%20locally-475569?style=flat-square" alt="Agent 在本机运行">
 </p>
@@ -27,7 +27,7 @@
 
 ## 这是什么
 
-Feishu Collaborator 是一个开源桌面工作台，将飞书机器人连接到你电脑上已经安装的 <strong>Codex、Claude Code、Hermes 或 OpenClaw</strong>。
+FeiShu Bot 是一个开源桌面工作台，将飞书机器人连接到你电脑上已经安装的 <strong>Codex、Claude Code、Hermes 或 OpenClaw</strong>。
 
 你可以在客户端里管理机器人，为不同飞书群选择工作目录、工作角色、Skills 和项目资料。配置完成后，已启用群的成员可在飞书群里发起任务，本机 Agent 执行，再把结果回复到群里。
 
@@ -41,7 +41,7 @@ Feishu Collaborator 是一个开源桌面工作台，将飞书机器人连接到
 
 当你想让 AI 帮忙时，经常要重新找链接、说明项目背景、切换工作目录，再把结果搬回群里。换一个项目，这些步骤又要做一遍。
 
-Feishu Collaborator 希望减少这类重复准备：<strong>把群、项目目录、角色和资料关联起来，让你在熟悉的沟通入口发起工作。</strong>产品、研发、巡检可以有不同的角色配置，也可以围绕同一份需求或 Bug 记录继续讨论。具体要做什么、何时写入、何时上线，仍由任务要求和实际授权决定。
+FeiShu Bot 希望减少这类重复准备：<strong>把群、项目目录、角色和资料关联起来，让你在熟悉的沟通入口发起工作。</strong>产品、研发、巡检可以有不同的角色配置，也可以围绕同一份需求或 Bug 记录继续讨论。具体要做什么、何时写入、何时上线，仍由任务要求和实际授权决定。
 
 ## 可以用它做什么
 
@@ -81,9 +81,15 @@ Feishu Collaborator 希望减少这类重复准备：<strong>把群、项目目�
 
 ## 快速开始
 
+### Agent 与群组两种视角
+
+首页可切换「Agent 视角／群组视角」。群组视角统计本机已配置的群，展示每个群关联的 Agent、在线状态和启用状态；点击「本群设置」可修改对应 Agent 的职责、目录、资料和 Skill。两个视角共用配置，原有 Agent 管理方式保留。
+
+软件现名 **FeiShu Bot**（原 Feishu Collaborator）。升级继续使用原有机器人配置、定时计划与 Skill 目录。
+
 ### 1. 下载客户端
 
-前往 <strong>[GitHub Releases 下载](https://github.com/Miraclemin/feishu-collaborator/releases)</strong>，根据电脑选择安装包：
+前往 <strong>[GitHub Releases 下载](https://github.com/Miraclemin/FeiShu-Bot/releases)</strong>，根据电脑选择安装包：
 
 | 系统 | 选择的文件 | 安装方式 |
 | --- | --- | --- |
@@ -418,7 +424,7 @@ node bin/lark-channel-bridge.mjs secrets --help
 
 ### 可以分享给朋友吗？
 
-可以，直接分享[下载页面](https://github.com/Miraclemin/feishu-collaborator/releases)即可。朋友需要在自己的电脑安装客户端，登录自己的 Agent，并绑定自己的飞书机器人。不要把自己的 App Secret、token 或配置目录一起发送。
+可以，直接分享[下载页面](https://github.com/Miraclemin/FeiShu-Bot/releases)即可。朋友需要在自己的电脑安装客户端，登录自己的 Agent，并绑定自己的飞书机器人。不要把自己的 App Secret、token 或配置目录一起发送。
 
 ### 同一个群里的其他人也能调用吗？
 
@@ -437,8 +443,8 @@ node bin/lark-channel-bridge.mjs secrets --help
 适合希望修改项目或参与贡献的开发者。需要 <strong>Node.js 22.12+、pnpm 10.33.0</strong>；使用 Python 项目绑定工具时还需要 Python 3.9+，该工具目前依赖 Unix 文件锁。
 
 ```bash
-git clone https://github.com/Miraclemin/feishu-collaborator.git
-cd feishu-collaborator
+git clone https://github.com/Miraclemin/FeiShu-Bot.git
+cd FeiShu-Bot
 corepack enable
 pnpm install --frozen-lockfile
 pnpm desktop:dev
@@ -461,13 +467,13 @@ pnpm desktop:dist    # 生成当前平台安装包
 - [安装与首次使用](docs/GETTING-STARTED.zh.md)：下载安装、初次连接与分享。
 - [工作台说明](docs/WORKBENCH.md)：引擎适配、技能机制与权限行为。
 - [上游中文文档](docs/UPSTREAM-README.zh.md)：了解底层 Bridge 的背景与原有用法。
-- [提交 Issue](https://github.com/Miraclemin/feishu-collaborator/issues)：反馈问题或讨论想法。
+- [提交 Issue](https://github.com/Miraclemin/FeiShu-Bot/issues)：反馈问题或讨论想法。
 
 欢迎通过 Issue 和 Pull Request 参与改进。报告问题时请附操作系统、客户端版本、所用引擎、复现步骤与脱敏后的错误信息；不要提交密钥、访问令牌或私有聊天内容。
 
 ## 项目来源与致谢
 
-Feishu Collaborator 基于 [Miraclemin/lark-team-agent-bridge](https://github.com/Miraclemin/lark-team-agent-bridge) 独立演进，延续其飞书消息连接与项目配置能力，并增加桌面工作台、按群配置、本机多引擎选择及项目资料入口。
+FeiShu Bot 基于 [Miraclemin/lark-team-agent-bridge](https://github.com/Miraclemin/lark-team-agent-bridge) 独立演进，延续其飞书消息连接与项目配置能力，并增加桌面工作台、按群配置、本机多引擎选择及项目资料入口。
 
 其源码基础来自 [zarazhangrui/feishu-claude-code-bridge](https://github.com/zarazhangrui/feishu-claude-code-bridge)。感谢上游作者和贡献者提供飞书与本机 Agent 之间的连接基础。本仓库保留上游许可证与原版文档。
 

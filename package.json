@@ -1,6 +1,6 @@
 {
   "name": "feishu-collaborator",
-  "version": "0.8.0-preview.7",
+  "version": "0.8.0-preview.8",
   "description": "Feishu desktop collaborator with per-group agents, skills and workspace configuration",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -10,12 +10,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Miraclemin/feishu-collaborator.git"
+    "url": "git+https://github.com/Miraclemin/FeiShu-Bot.git"
   },
   "bugs": {
-    "url": "https://github.com/Miraclemin/feishu-collaborator/issues"
+    "url": "https://github.com/Miraclemin/FeiShu-Bot/issues"
   },
-  "homepage": "https://github.com/Miraclemin/feishu-collaborator",
+  "homepage": "https://github.com/Miraclemin/FeiShu-Bot",
   "bin": {
     "lark-channel-bridge": "./bin/lark-channel-bridge.mjs",
     "feishu-collaborator": "./bin/lark-channel-bridge.mjs"

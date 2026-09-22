@@ -4,7 +4,7 @@
 
 ## 1. 下载并安装
 
-打开 [Releases](https://github.com/Miraclemin/feishu-collaborator/releases)，选择最新预览版：
+打开 [Releases](https://github.com/Miraclemin/FeiShu-Bot/releases)，选择最新预览版：
 
 - Mac M 系列芯片：文件名包含 `mac-arm64.dmg`。
 - Mac Intel 芯片：文件名包含 `mac-x64.dmg`。
@@ -40,11 +40,11 @@ Hermes/OpenClaw 目前需要完整本机权限；Codex/Claude 可按界面支持
 需要 Node.js 22.12+、pnpm 10.33.0；Python 项目绑定工具需要 Python 3.9+（目前使用 Unix 文件锁）。
 
 ```bash
-git clone https://github.com/Miraclemin/feishu-collaborator.git
-cd feishu-collaborator
+git clone https://github.com/Miraclemin/FeiShu-Bot.git
+cd FeiShu-Bot
 corepack enable
 pnpm install --frozen-lockfile
 pnpm desktop:dev
 ```
 
-[功能与权限边界](WORKBENCH.md) · [提交问题](https://github.com/Miraclemin/feishu-collaborator/issues)
+[功能与权限边界](WORKBENCH.md) · [提交问题](https://github.com/Miraclemin/FeiShu-Bot/issues)
