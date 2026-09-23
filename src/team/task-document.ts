@@ -1,3 +1,4 @@
+import { assignmentEnvelope } from './assignment-document';
 import { createHash } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -7,38 +8,51 @@ import { mutateTasks, readTasks, taskStatus, watchTasks, type TeamTask } from '.
 
 const queues = new Map<string, Promise<unknown>>();
 export function documentSnapshot(t: TeamTask): string {
-  return `${taskStatus(t)}\n\n任务发起人：${t.requester}\n创建时间：${t.createdAt}\n更新时间：${t.updatedAt}\n\n分工与执行结果\n${t.steps.map(s=>`${s.id} · ${s.name}\n要求：${s.instruction}\n结果：${s.result || '等待执行者回执'}${s.resumes ? `\n续接：${s.resumes}` : ''}`).join('\n\n')}\n\n人的反馈\n${(t.updates??[]).map(u=>`${u.sender}：${u.text}`).join('\n') || '暂无'}\n\n过程时间线\n${(t.history??[]).map(h=>`${h.at}\n${h.text}`).join('\n\n')}\n\n说明：本地文件路径仅在执行机器可访问；此文档记录派单、回执与反馈，不代表完整工具日志。`;
+  return `${t.steps.map(s=>assignmentEnvelope(t.id,s).text).join('\n\n')}\n\n${taskStatus(t)}\n\n任务发起人：${t.requester}\n创建时间：${t.createdAt}\n更新时间：${t.updatedAt}\n\n分工与执行结果\n${t.steps.map(s=>`${s.id} · ${s.name}\n要求：${s.instruction}\n结果：${s.result || '等待执行者回执'}${s.resumes ? `\n续接：${s.resumes}` : ''}`).join('\n\n')}\n\n人的反馈\n${(t.updates??[]).map(u=>`${u.sender}：${u.text}`).join('\n') || '暂无'}\n\n过程时间线\n${(t.history??[]).map(h=>`${h.at}\n${h.text}`).join('\n\n')}\n\n说明：本地文件路径仅在执行机器可访问；此文档记录派单、回执与反馈，不代表完整工具日志。`;
 }
 /** Serialized per ledger. A lost create response never causes a second document. */
 export async function syncTaskDocument(file: string, id: string, client: VcRequestClient): Promise<string> {
-  const run = (queues.get(file) ?? Promise.resolve()).catch(()=>{}).then(async()=>{
+  const initial = await readTasks(file);
+  if (!initial.context) throw new Error('任务或群信息缺失');
+  const context = initial.context;
+  const groupFile = join(dirname(file), 'group-' + createHash('sha256').update(JSON.stringify([context.profile, context.chatId])).digest('hex') + '.json');
+  const saveGroup = async (doc: TeamTask['document']) => mutateTasks(groupFile, l => { l.groupDocument = doc; });
+  const run = (queues.get(groupFile) ?? Promise.resolve()).catch(()=>{}).then(async()=>{
     const ledger=await readTasks(file); const task=ledger.tasks.find(t=>t.id===id);
     if(!task || !ledger.context) throw new Error('任务或群信息缺失');
     const save=async(change:(t:TeamTask)=>void)=>mutateTasks(file,l=>change(l.tasks.find(t=>t.id===id)!));
     try {
-      let doc=task.document;
+      let doc=(await readTasks(groupFile)).groupDocument;
       if(!doc?.token) {
         if(doc?.creating) throw new Error('文档创建结果待核对，请勿重复创建');
-        await save(t=>{t.document={creating:true};});
-        const r=await client.request<{code?:number;data?:{document?:{document_id?:string}}}>({method:'POST',url:'/open-apis/docx/v1/documents',data:{title:`${id} · ${task.goal.slice(0,70)}`}});
-        if(r.code) {await save(t=>{t.document={error:`创建失败 ${r.code}`};});throw new Error(`文档创建失败 ${r.code}`);}
+        await saveGroup({creating:true});
+        const r=await client.request<{code?:number;data?:{document?:{document_id?:string}}}>({method:'POST',url:'/open-apis/docx/v1/documents',data:{title:`群协作进度 · ${ledger.context.chatId}`}});
+        if(r.code) {await saveGroup({error:`创建失败 ${r.code}`});throw new Error(`文档创建失败 ${r.code}`);}
         const token=r.data?.document?.document_id;
         if(!token) throw new Error('文档创建未返回 ID，需要核对');
         doc={token,url:`https://feishu.cn/docx/${token}`};
-        await save(t=>{t.document=doc;});
+        await saveGroup(doc);
       }
       const token=doc.token!;
-      if(!doc.shared) {
+      if(task.document?.token!==token) await save(t=>{t.document={token,url:doc!.url};});
+      if(!task.document?.shared || task.document.token!==token) {
         for(const [member_type,member_id,perm] of [['openid',task.requester,'edit'],['openchat',ledger.context.chatId,'view']]) {
           const r=await client.request<{code?:number}>({method:'POST',url:`/open-apis/drive/v1/permissions/${token}/members`,params:{type:'docx',need_notification:false},data:{member_type,member_id,perm}});
           if(r.code) throw new Error(`文档分享失败 ${r.code}`);
         }
         await save(t=>{t.document!.shared=true;});
       }
-      const latest=(await readTasks(file)).tasks.find(t=>t.id===id)!;
-      const content=documentSnapshot({...latest,document:undefined});
+      const all: TeamTask[] = [];
+      for (const name of await readdir(dirname(file))) {
+        if (!name.endsWith('.json') || name.startsWith('group-')) continue;
+        const other = await readTasks(join(dirname(file),name));
+        if(other.context?.profile===context.profile && other.context.chatId===context.chatId) all.push(...other.tasks);
+      }
+      all.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+      const overview=all.map(t=>`${t.id} · ${t.goal}\n${t.paused?'已暂停':t.state} · ${t.steps.filter(s=>s.state==='waiting').map(s=>s.name).join('、') || '组织者'}\n下一步：${t.note || t.summary || '等待组织者安排'}`).join('\n\n');
+      const content=`群任务总览\n${overview}\n\n各任务详细记录\n\n`+all.map(t=>documentSnapshot({...t,document:undefined})+(t.document?.token && t.document.token!==token ? `\n历史任务文档：${t.document.url}` : '')).join('\n\n────────────\n\n');
       const hash=createHash('sha256').update(content).digest('hex');
-      if(latest.document?.hash!==hash) {
+      if(doc.hash!==hash) {
         // A marker makes retry safe after an append succeeds but its response is lost.
         const marker=`记录版本 ${hash}`;
         const existing=await client.request<{code?:number;data?:{content?:string}}>({method:'GET',url:`/open-apis/docx/v1/documents/${token}/raw_content`});
@@ -57,10 +71,17 @@ export async function syncTaskDocument(file: string, id: string, client: VcReque
             if(r.code) throw new Error(`文档同步失败 ${r.code}`);
           }
         }
+        doc.hash=hash;doc.error=undefined;await saveGroup(doc);
         await save(t=>{t.document!.hash=hash;t.document!.error=undefined;});
       }
       return doc.url!;
     } catch(e) {
+      const shared=(await readTasks(groupFile)).groupDocument;
+      if(shared) {
+        const status=(e as {response?:{status?:number}}).response?.status;
+        if(!shared.token && status && status>=400 && status<500 && status!==408) shared.creating=false;
+        shared.error=(e as Error).message;await saveGroup(shared);
+      }
       await save(t=>{
         t.document ??={};
         const status=(e as {response?:{status?:number}}).response?.status;
@@ -70,7 +91,7 @@ export async function syncTaskDocument(file: string, id: string, client: VcReque
       throw e;
     }
   });
-  queues.set(file,run);try{return await run;}finally{if(queues.get(file)===run)queues.delete(file);}
+  queues.set(groupFile,run);try{return await run;}finally{if(queues.get(groupFile)===run)queues.delete(groupFile);}
 }
 
 export async function startTaskDocuments(root:string,profile:string,channel:LarkChannel,enabled:(chat:string)=>boolean):Promise<()=>void> {

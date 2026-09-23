@@ -1,3 +1,4 @@
+import { digestCanonical } from '../policy/fingerprint';
 import { workbenchPrompt } from './workbench-context';
 import type { AgentCapability } from '../agent/capability';
 import { resolveModelArg } from '../agent/models';
@@ -24,6 +25,8 @@ import type { WorkspaceStore } from '../workspace/store';
 
 export interface StartRunFlowInput {
   scopeId: string;
+  /** Resume only authenticated executor assignments within the same TEAM. */
+  allowTaskResume?: boolean;
   scope: ScopeContext;
   prompt: string;
   attachments: AgentAttachment[];
@@ -112,10 +115,19 @@ export async function startRunFlow(input: StartRunFlowInput): Promise<StartRunFl
     };
   }
 
+  const taskResume = input.allowTaskResume === true && /:team:TEAM-[a-zA-Z0-9-]+$/.test(input.scopeId);
+  if (taskResume && input.profileConfig.workbench) {
+    policy.policyFingerprint = digestCanonical({
+      policy: policy.policyFingerprint,
+      group,
+      revision: input.profileConfig.workbench.revision,
+    });
+  }
+
   let resumeFrom: string | undefined;
   let sessionId: string | undefined;
   let threadId: string | undefined;
-  if (!input.profileConfig.workbench && input.sessionCatalog) {
+  if ((!input.profileConfig.workbench || taskResume) && input.sessionCatalog) {
     const catalogEntry = input.sessionCatalog.activeFor({
       scopeId: input.scopeId,
       agentId: input.capability.agentId,

@@ -7,6 +7,9 @@ export interface TeamStep {
   id: string; recipient: string; name: string; instruction: string;
   state: 'sending' | 'waiting' | 'done' | 'blocked' | 'uncertain' | 'question' | 'rejected' | 'superseded';
   resumes?: string;
+  kind?: 'preflight' | 'work' | 'review';
+  verifies?: string[];
+  preflight?: string;
   messageId?: string; result?: string; receiptId?: string;
 }
 export interface TeamTask {
@@ -14,12 +17,14 @@ export interface TeamTask {
   state: 'planning' | 'waiting' | 'ready' | 'blocked' | 'completed' | 'cancelled';
   createdAt: string; updatedAt: string; round: number; steps: TeamStep[];
   summary?: string; note?: string;
+  paused?: boolean;
+  messageIds?: string[];
   history?: {at:string;text:string}[];
   document?: {token?:string;url?:string;creating?:boolean;shared?:boolean;hash?:string;error?:string};
   deadlineAt?: number; deadlineNotified?: boolean;
   updates?: {sender:string;messageId:string;text:string}[];
 }
-export interface TeamLedger { tasks: TeamTask[]; context?: { profile: string; chatId: string; threadId?: string } }
+export interface TeamLedger { groupDocument?: TeamTask['document']; tasks: TeamTask[]; context?: { profile: string; chatId: string; threadId?: string } }
 export const terminalTask = (t: TeamTask) => t.state === 'completed' || t.state === 'cancelled';
 export const activeTask = (l: TeamLedger) => l.tasks.find(t => !terminalTask(t));
 export function taskFile(root: string, profile: string, scope: string): string {
@@ -64,7 +69,7 @@ export async function mutateTasks<T>(file: string, change: (ledger: TeamLedger) 
 }
 export function expireTask(ledger: TeamLedger, id: string, now: number): TeamTask | undefined {
   const t = ledger.tasks.find(t => t.id === id);
-  if (!t || terminalTask(t) || t.deadlineNotified || !t.deadlineAt || now < t.deadlineAt || !t.steps.some(s => s.state === 'waiting' || s.state === 'sending' || s.state === 'uncertain')) return;
+  if (!t || t.paused || terminalTask(t) || t.deadlineNotified || !t.deadlineAt || now < t.deadlineAt || !t.steps.some(s => s.state === 'waiting' || s.state === 'sending' || s.state === 'uncertain')) return;
   t.deadlineNotified = true; t.state = 'blocked';
   t.note = '等待回执超过15分钟。已有结果已保存；不会重复派单。请核对执行者是否在线，或 /team resume 检查历史回执。';
   touchTask(t); return structuredClone(t);
@@ -85,6 +90,7 @@ export function receiveResult(ledger: TeamLedger, input: { taskId: string; stepI
   if (!s || s.receiptId || s.state === 'done' || s.state === 'blocked') return 'ignore';
   s.result = input.body.slice(0, 24000); s.receiptId = input.messageId;
   s.state = input.kind ?? (input.blocked ? 'blocked' : 'done'); touchTask(t);
+  if (t.paused) return 'stored';
   if (input.blocked || input.kind) { t.state = 'blocked'; return 'wake'; }
   if (!t.steps.some(s=>['sending','waiting','uncertain'].includes(s.state))) { t.state = 'ready'; return 'wake'; }
   return 'stored';
@@ -97,7 +103,7 @@ const labels: Record<TeamTask['state'] | TeamStep['state'], string> = {
 export function taskStatus(t?: TeamTask): string {
   if (!t) return '当前没有协作任务。直接 @我提问，或发“组织协作：具体目标”开始。';
   const age = Math.floor((Date.now() - Date.parse(t.updatedAt)) / 60000);
-  return `**${t.id} · ${labels[t.state]}**\n${t.goal}\n` +
+  return `**${t.id} · ${t.paused ? '已暂停' : labels[t.state]}**\n${t.goal}\n` +
     t.steps.map(s => `- ${s.name}：${labels[s.state]}`).join('\n') +
     (t.document?.url ? `\n任务文档：${t.document.url}` : '') + (t.document?.error ? `\n文档同步待处理：${t.document.error}` : '') +
     (t.note ? `\n${t.note}` : '') + (t.summary ? `\n${t.summary}` : '') +

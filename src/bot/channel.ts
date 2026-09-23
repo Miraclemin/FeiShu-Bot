@@ -1,3 +1,5 @@
+import { readAssignment } from '../team/assignment-document';
+import { taskIntent, queryContext } from '../team/task-routing';
 import { changeSchedules, readSchedules } from '../schedule/store';
 import { startScheduler, ScheduleBusyError } from '../schedule/scheduler';
 import { scheduleCommand, scheduleCardAction } from '../schedule/commands';
@@ -746,7 +748,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
   // Carry the (possibly backfilled) threadId on the message so the batched
   // flush — which reads `firstMsg.threadId` for reply routing and topic scope —
   // sees it.
-  const emsg: NormalizedMessage = threadId === msg.threadId ? msg : { ...msg, threadId };
+  let emsg: NormalizedMessage = threadId === msg.threadId ? msg : { ...msg, threadId };
   // Some groups are converted into topic groups after creation. In that state
   // getChatMode can lag behind the message event shape, so threadId is the
   // stronger signal for topic-scoped sessions and reply routing.
@@ -761,7 +763,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
   }
   const assigned = assignmentOf([emsg]);
   const baseScope = chatMode === 'topic' && threadId ? `${msg.chatId}:${threadId}` : msg.chatId;
-  const scope = assigned ? `${baseScope}:team:${assigned.taskId}:${assigned.stepId}` : baseScope;
+  const scope = assigned ? `${baseScope}:team:${assigned.taskId}` : baseScope;
   log.info('intake', 'enter', {
     profile: controls.profile,
     scope,
@@ -813,6 +815,13 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     return;
   }
 
+  if (assigned && emsg.content.includes('#bot-instruction=')) {
+    try { emsg = {...emsg, content: await readAssignment(channel.rawClient as unknown as VcRequestClient, emsg.content, assigned.taskId, assigned.stepId, channel.botIdentity?.openId)}; }
+    catch {
+      await channel.send(msg.chatId,{markdown:`[协作回执 ${assigned.taskId} ${assigned.stepId} 阻塞]\n无法核对任务文档中的派单，未执行。请组织者检查文档访问权限与同步状态。`},{replyTo:msg.messageId,mentions:[{key:'@organizer',openId:msg.senderId,isBot:true}]});
+      return;
+    }
+  }
   if (await scheduleCommand(dirname(controls.configPath), controls, channel, emsg)) return;
   const capabilityAssignment = assignmentOf([emsg]);
   if (capabilityAssignment && emsg.content.includes('[协作能力查询]')) {
@@ -881,7 +890,7 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     await channel.send(emsg.chatId, { markdown: `事项 ${review.id} ${review.state === 'pending' ? '等待负责人确认' : '已被拒绝，请修改方案并重新 /review request'}。当前会话暂不启动新任务；用 /review status 查看。` }, { replyTo: emsg.messageId });
     return;
   }
-  if (!agentMessage) {
+  if (!agentMessage && !coordinatorEnabled(boundGroup)) {
     await channel.send(emsg.chatId, { markdown: activeRuns.get(scope) ? '收到，已排队，上一项处理完就继续。' : '收到，正在处理…' },
       { replyTo: emsg.messageId, ...(chatMode === 'topic' ? { replyInThread: true } : {}) })
       .catch(err => log.warn('intake', 'ack-failed', { err: String(err) }));
@@ -1022,13 +1031,14 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
   const assignment = assignmentOf(batch);
   const returnMention = handoffReturnMention(batch, assignment ? { ...coordinatorGroup, role: 'executor' } : coordinatorGroup);
   const teamFile = taskFile(dirname(controls.configPath), controls.profile, scope);
-  const teamTask = !deps.scheduledSingle && coordinatorEnabled(coordinatorGroup) && !assignment ? activeTask(await readTasks(teamFile)) : undefined;
+  const queryOnly = batch.every(m => !m.senderIsBot && !['bot','app'].includes(m.senderType ?? '') && !m.content.includes('[协作回执 ') && taskIntent(m.content) === 'query');
+  const teamLedger = await readTasks(teamFile);
+  const teamTask = !queryOnly && !deps.scheduledSingle && coordinatorEnabled(coordinatorGroup) && !assignment ? activeTask(teamLedger) : undefined;
+  if (teamTask?.paused) return;
   if (teamTask) {
     try {
-      const hadDocument = !!teamTask.document?.url;
-      const url = await syncTaskDocument(teamFile, teamTask.id, channel.rawClient as unknown as VcRequestClient);
+      await syncTaskDocument(teamFile, teamTask.id, channel.rawClient as unknown as VcRequestClient);
       teamTask.document = (await readTasks(teamFile)).tasks.find(t => t.id === teamTask.id)?.document;
-      if (!hadDocument) await channel.send(chatId, {markdown:`${teamTask.id} · 任务文档：${url}`}, {replyTo:lastMsg.messageId});
     } catch (e) {
       await channel.send(chatId, {markdown:`任务已保存，文档尚未就绪，暂不继续派单：${(e as Error).message}。修复权限后 /team resume 重试。`}, {replyTo:lastMsg.messageId});
       return;
@@ -1058,7 +1068,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     quotes,
     topicContext,
     channel.botIdentity,
-    [...(extraInstructions ?? []), ...directoryContext, ...handbookContext, ...(teamTask ? [coordinatorPrompt(teamTask)] : coordinatorEnabled(coordinatorGroup) ? ['本轮是普通对话，不自动派发任务。如用户需要组织协作，提示发送“组织协作：目标”。'] : []), ...(returnMention ? ['本轮是机器人交接任务。最终结果由软件自动真实 @ 派发者交回；直接输出完整结果即可，不要再用发消息工具重复发送最终报告。'] : []), ...(agentKind === 'codex' ? [deliveryInstructions] : [])],
+    [...(extraInstructions ?? []), ...directoryContext, ...handbookContext, ...(teamTask ? [coordinatorPrompt(teamTask)] : coordinatorEnabled(coordinatorGroup) ? [queryContext(teamLedger, lastMsg)] : []), ...(returnMention ? ['本轮是机器人交接任务。最终结果由软件自动真实 @ 派发者交回；直接输出完整结果即可，不要再用发消息工具重复发送最终报告。'] : []), ...(agentKind === 'codex' ? [deliveryInstructions] : [])],
   );
   log.info('prompt', 'built', {
     promptChars: prompt.length,
@@ -1097,6 +1107,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     capabilityFor(controls.profileConfig);
   const flow = await projectRunContext.run({LARK_PROJECT_CHAT_ID: chatId, LARK_PROJECT_TOPIC_ID: mode === 'topic' ? (threadId ?? '') : ''}, () => startRunFlow({
     scopeId: scope,
+    allowTaskResume: Boolean(assignment),
     scope: scopeContext,
     prompt,
     attachments: attachments.map(toPolicyAttachment),
@@ -1238,7 +1249,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
     if (teamTask || assignment) {
       const state = finalAnswerOnlyState(await processAgentStream(handle, eventStream, scope, idleTimeoutMs, recordSession, async () => {}));
       if (teamTask) {
-        await applyTeamAction({ file: teamFile, taskId: teamTask.id, body: renderText(state), success: state.terminal === 'done',
+        await applyTeamAction({ file: teamFile, taskId: teamTask.id, expectedUpdatedAt:teamTask.updatedAt, body: renderText(state), success: state.terminal === 'done',
           channel, chatId, directory: teamDirectory, sendOpts,
           enabled: () => coordinatorEnabled(controls.profileConfig.workbench?.groups[chatId]) });
         if (!activeTask(await readTasks(teamFile))) sessions.clear(scope);
@@ -1247,7 +1258,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
         const status = state.terminal !== 'done' || !body.trim() ? '阻塞' : body.trim().replace(/^\*\*/, '').match(/^(需要补充|验收未通过|阻塞)/)?.[1] ?? '完成';
         const result = await channel.send(chatId, { markdown: `[协作回执 ${assignment.taskId} ${assignment.stepId} ${status}]\n${body || '执行未产生结果，请人工检查。'}` }, { ...sendOpts, mentions: [returnMention] });
         requireMessageReceipt(result, 'team-result');
-        sessions.clear(scope);
+        // Preserve this task's executor session for subsequent clarification/repair.
       } else {
         await sendFinalReply({channel, chatId, scope, state, replyMode, sendOpts, returnMention, cardRenderOptions});
       }

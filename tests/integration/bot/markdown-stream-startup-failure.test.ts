@@ -1,3 +1,4 @@
+import { assignmentEnvelope } from '../../../src/team/assignment-document';
 import { readTasks, taskFile, activeTask } from '../../../src/team/task-store';
 import type { NormalizedMessage } from '@larksuite/channel';
 import { realpath } from 'node:fs/promises';
@@ -7,6 +8,7 @@ import type { AgentEvent } from '../../../src/agent/types.js';
 import type { FakeAgentEvents } from '../../helpers/fake-agent.js';
 import { createDefaultProfileConfig } from '../../../src/config/profile-schema.js';
 import { log } from '../../../src/core/logger.js';
+import { SessionCatalog } from '../../../src/session/catalog.js';
 import { SessionStore } from '../../../src/session/store.js';
 import { WorkspaceStore } from '../../../src/workspace/store.js';
 import { FakeAgentAdapter } from '../../helpers/fake-agent.js';
@@ -443,7 +445,7 @@ describe('markdown stream startup failures', () => {
 describe('managed team tasks through channel intake', () => {
   it('dispatches and joins results without model calls for ACKs, then archives and accepts a new task', async () => {
     const final = (a:unknown):AgentEvent[] => [{type:'final_text',content:'```team-action\n'+JSON.stringify(a)+'\n```'},{type:'done',terminationReason:'normal'}];
-    const h=await createHarness({events:[final({action:'dispatch',summary:'分工',assignments:[{recipient:'ou_dev',name:'研发',instruction:'只读评审'},{recipient:'ou_test',name:'测试',instruction:'独立验收设计'}]}),final({action:'finish',summary:'评审已完成，暂不实施'}),final({action:'finish',summary:'第二个任务已完成',directAnswer:{kind:'consultation',reason:'解释协作概念'}})]});
+    const h=await createHarness({events:[final({action:'dispatch',summary:'分工',assignments:[{recipient:'ou_dev',name:'研发',kind:'review',instruction:'只读评审'},{recipient:'ou_test',name:'测试',kind:'review',instruction:'独立验收设计'}]}),final({action:'finish',summary:'评审已完成，暂不实施'}),final({action:'finish',summary:'第二个任务已完成',directAnswer:{kind:'consultation',reason:'解释协作概念'}})]});
     h.controls.configPath=join(h.tmp.profile,'config.json');
     h.profileConfig.workbench={revision:0,protectDocuments:true,groups:{oc_team:{enabled:true,name:'team',workspace:h.tmp.workspace,persona:'',documents:[],skills:[],role:'coordinator'}}};
     let documentsCreated=0;
@@ -455,7 +457,7 @@ describe('managed team tasks through channel intake', () => {
     await startTestBridge(h);
     const msg=(id:string,content:string,sender='ou_user')=>({...message(id,content),chatId:'oc_team',chatType:'group',mentionedBot:true,createTime:Date.now(),senderId:sender,senderType:sender==='ou_user'?'user':'bot',senderIsBot:sender!=='ou_user'} as NormalizedMessage);
     await h.channel.handlers.message?.(msg('om_team_start','组织协作：只读评审'));
-    await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('等待回执')));
+    await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('bot-instruction=') && JSON.stringify(m.content).includes('S2')));
     const file=taskFile(h.tmp.profile,'codex','oc_team'); const task=activeTask(await readTasks(file))!;
     expect(task.steps).toHaveLength(2);expect(h.agent.runOptions).toHaveLength(1);
     await h.channel.handlers.message?.(msg('om_team_ack','已接单 '+task.id,'ou_dev'));
@@ -469,8 +471,43 @@ describe('managed team tasks through channel intake', () => {
     await h.channel.handlers.message?.(msg('om_team_new','组织协作：解释协作概念'));
     await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('第二个任务已完成')));
     expect(JSON.stringify(h.channel.sent)).not.toContain('team-action');
-    expect(documentsCreated).toBe(2);
+    expect(documentsCreated).toBe(1);
     expect(h.agent.runOptions[2]!.prompt).not.toContain('研发证据');
+  });
+  it('answers a progress question without registering a task or creating a document',async()=>{
+    const h=await createHarness({events:[{type:'final_text',content:'当前样片未通过，等待处理生成环境。'},{type:'done',terminationReason:'normal'}]});
+    h.controls.configPath=join(h.tmp.profile,'config.json');
+    h.profileConfig.workbench={revision:0,protectDocuments:true,groups:{oc_team:{enabled:true,name:'team',workspace:h.tmp.workspace,persona:'',documents:[],skills:[],role:'coordinator'}}};
+    await startTestBridge(h);
+    await h.channel.handlers.message?.({...message('query','这个有什么卡点吗？'),chatId:'oc_team',chatType:'group',mentionedBot:true,senderId:'ou_user',createTime:Date.now()} as NormalizedMessage);
+    await waitFor(()=>h.channel.sent.some(m=>JSON.stringify(m.content).includes('当前样片未通过')));
+    expect((await readTasks(taskFile(h.tmp.profile,'codex','oc_team'))).tasks).toHaveLength(0);
+    expect(h.channel.rawClient.request.mock.calls.some(([p])=>p.url==='/open-apis/docx/v1/documents')).toBe(false);
+    expect(h.agent.runOptions[0]!.prompt).toContain('本轮只回答问题');
+  });
+  it('reads compact instructions and preserves the same task session for follow-up',async()=>{
+    const h=await createHarness({events:[{type:'system',threadId:'executor-session'},{type:'final_text',content:'完成：检查证据'},{type:'done',terminationReason:'normal'}]});
+    h.controls.configPath=join(h.tmp.profile,'config.json');
+    h.profileConfig.workbench={revision:0,protectDocuments:true,groups:{oc_team:{enabled:true,name:'team',workspace:h.tmp.workspace,persona:'',documents:[],skills:[],role:'developer'}}};
+    const e=assignmentEnvelope('TEAM-12345678',{id:'S1',name:'检查',recipient:'ou_bot',instruction:'只读核对指定素材',kind:'preflight',state:'waiting'});
+    h.channel.rawClient.request.mockResolvedValue({code:0,data:{content:e.text}});
+    await startTestBridge(h);
+    const assigned=(id:string,content:string)=>({...message(id,content),chatId:'oc_team',chatType:'group',mentionedBot:true,senderId:'ou_org',senderType:'bot',senderIsBot:true,createTime:Date.now()}) as NormalizedMessage;
+    await h.channel.handlers.message?.(assigned('first',`[协作派单 TEAM-12345678 S1]\n[任务要求](https://feishu.cn/docx/doc#bot-instruction=${e.hash})`));
+    await waitFor(()=>h.channel.sent.length>0);
+    expect(h.agent.runOptions[0]!.prompt).toContain('只读核对指定素材');
+    await h.channel.handlers.message?.(assigned('second','[协作派单 TEAM-12345678 S2] 继续检查'));
+    await waitFor(()=>h.agent.runOptions.length===2);
+    expect(h.agent.runOptions[1]!.threadId).toBe('executor-session');
+    await waitFor(()=>h.channel.sent.length>=2);
+    h.profileConfig.workbench.revision=1;
+    await h.channel.handlers.message?.(assigned('changed','[协作派单 TEAM-12345678 S3] 继续检查'));
+    await waitFor(()=>h.agent.runOptions.length===3);
+    expect(h.agent.runOptions[2]!.threadId).toBeUndefined();
+    await waitFor(()=>h.channel.sent.length>=3);
+    await h.channel.handlers.message?.(assigned('new','[协作派单 TEAM-87654321 S1] 检查新任务'));
+    await waitFor(()=>h.agent.runOptions.length===4);
+    expect(h.agent.runOptions[3]!.threadId).toBeUndefined();
   });
   it('returns a tracked executor result with correlation and a real mention',async()=>{
     const h=await createHarness({events:[{type:'final_text',content:'完成：只读证据'},{type:'done',terminationReason:'normal'}]});
@@ -536,6 +573,7 @@ async function createHarness(options: {
   channel: FakeLarkChannel;
   agent: FakeAgentAdapter;
   sessions: SessionStore;
+  sessionCatalog: SessionCatalog;
   workspaces: WorkspaceStore;
   profileConfig: ReturnType<typeof createDefaultProfileConfig>;
   controls: ReturnType<typeof createControls>;
@@ -566,6 +604,7 @@ async function createHarness(options: {
       default: workspace,
     },
   };
+  const sessionCatalog = new SessionCatalog(join(tmp.profile, 'sessions.catalog.json'));
   const sessions = new SessionStore(join(tmp.profile, 'sessions.json'));
   const workspaces = new WorkspaceStore(join(tmp.profile, 'workspaces.json'));
   const agent = new FakeAgentAdapter({
@@ -586,7 +625,7 @@ async function createHarness(options: {
   sdkMock.channel = channel;
   const controls = createControls(profileConfig);
   cleanups.push(async () => {
-    await Promise.all([sessions.flush(), workspaces.flush()]);
+    await Promise.all([sessions.flush(), sessionCatalog.flush(), workspaces.flush()]);
     await tmp.cleanup();
   });
   return {
@@ -594,6 +633,7 @@ async function createHarness(options: {
     channel,
     agent,
     sessions,
+    sessionCatalog,
     workspaces,
     profileConfig,
     controls,
@@ -604,6 +644,7 @@ async function startTestBridge(h: {
   profileConfig: ReturnType<typeof createDefaultProfileConfig>;
   agent: FakeAgentAdapter;
   sessions: SessionStore;
+  sessionCatalog: SessionCatalog;
   workspaces: WorkspaceStore;
   controls: ReturnType<typeof createControls>;
 }): Promise<void> {
@@ -611,6 +652,7 @@ async function startTestBridge(h: {
     cfg: h.profileConfig,
     agent: h.agent,
     sessions: h.sessions,
+    sessionCatalog: h.sessionCatalog,
     workspaces: h.workspaces,
     controls: h.controls,
   });

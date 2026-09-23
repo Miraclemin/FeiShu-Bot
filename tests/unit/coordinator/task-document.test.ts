@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createTask,mutateTasks,readTasks} from '../../../src/team/task-store';
 import {syncTaskDocument} from '../../../src/team/task-document';
-it('creates one shared document, syncs human feedback and cancellation, and gives a new task its own document',async()=>{
+it('creates one shared document, syncs human feedback and cancellation, and reuses it for new tasks',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'task-doc-'));const file=join(dir,'task.json');
  let count=0;const contents=new Map<string,string>();
  const request=vi.fn(async(p:any)=>{
@@ -25,8 +25,18 @@ it('creates one shared document, syncs human feedback and cancellation, and give
   await syncTaskDocument(file,t.id,client);expect(writes()).toBe(2);
   expect(contents.get('doc1')).toContain('手机通过');expect(contents.get('doc1')).toContain('已取消');
   const next=await mutateTasks(file,l=>createTask(l,'新项目','ou_owner','m3'));
-  await syncTaskDocument(file,next.id,client);expect(count).toBe(2);
+  await syncTaskDocument(file,next.id,client);expect(count).toBe(1);
   expect((await readTasks(file)).tasks[1]!.document?.url).toContain('doc1');
+  const topicFile=join(dir,'topic.json');
+  const topic=await mutateTasks(topicFile,l=>{l.context={profile:'org',chatId:'oc_group',threadId:'topic'};return createTask(l,'话题任务','ou_other','m4');});
+  const urls=await Promise.all([syncTaskDocument(file,next.id,client),syncTaskDocument(topicFile,topic.id,client)]);
+  expect(new Set(urls).size).toBe(1);expect(count).toBe(1);
+  expect(contents.get('doc1')).toContain('新项目');expect(contents.get('doc1')).toContain('话题任务');
+  const otherFile=join(dir,'other.json');
+  const other=await mutateTasks(otherFile,l=>{l.context={profile:'org',chatId:'oc_other'};return createTask(l,'另一群任务','ou_owner','m5');});
+  expect(await syncTaskDocument(otherFile,other.id,client)).toContain('doc2');
+  expect(contents.get('doc2')).not.toContain('话题任务');
+
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 it('does not duplicate a document after an uncertain creation response',async()=>{

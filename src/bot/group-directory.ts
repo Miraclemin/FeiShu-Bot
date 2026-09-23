@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import type { VcRequestClient } from '../meeting/api';
 import { loadRootConfig } from '../config/profile-store';
 
@@ -9,6 +10,7 @@ export interface GroupMember {
   ownerOpenId?: string;
   responsibilities?: string;
   capabilitySource?: string;
+  readiness?: {local:boolean;enabled:boolean;workspaceReady:boolean;selectedSkills:number;toolsAndCredentials:string};
 }
 /** Only expose same-group role descriptions, never credentials, paths or resources. */
 export async function enrichMemberRoles(directory: GroupDirectory, configPath: string): Promise<void> {
@@ -16,6 +18,10 @@ export async function enrichMemberRoles(directory: GroupDirectory, configPath: s
     const root=await loadRootConfig(configPath);
     for(const member of directory.members.filter(m=>m.kind==='bot' && m.appId)) {
       const profiles=Object.values(root?.profiles ?? {}).filter(p=>p.accounts.app.id===member.appId);
+      if(profiles.length===1) {
+        const group=profiles[0]!.workbench?.groups[directory.chatId];
+        member.readiness={local:true,enabled:group?.enabled===true,workspaceReady:!!group?.workspace && await stat(group.workspace).then(s=>s.isDirectory()).catch(()=>false),selectedSkills:group?.skills?.length??0,toolsAndCredentials:'需在接手 Bot 的执行环境中按任务核验，不继承其他会话凭证'};
+      }
       const descriptions=profiles.map(p=>p.workbench?.groups[directory.chatId]).filter(g=>g?.enabled && g.rolePrompt?.trim());
       if(descriptions.length===1) {
         const g=descriptions[0]!;
